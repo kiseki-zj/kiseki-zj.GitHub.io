@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"kiseki-zj.github.io","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"right","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"style":"mac"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="实验前准备 阅读xv6 book chapter5，尤其是page fault的部分  Eliminate allocation from sbrk()lazy allocation就是在用户程序通过sbrk系统调用申请内存空间时，并不当场给它分配内存，而仅仅是增加p-&gt;sz。当用户程序使用申请的内存时会产生page fault而trap到内核态，此时再分配内存。 第一个实验就是把sbrk中">
+<meta property="og:type" content="article">
+<meta property="og:title" content="MIT6.S081 Lab5 Lazy Allocation">
+<meta property="og:url" content="https://kiseki-zj.github.io/2021/04/24/MIT6.S081%20Lab5/index.html">
+<meta property="og:site_name" content="KISEKI">
+<meta property="og:description" content="实验前准备 阅读xv6 book chapter5，尤其是page fault的部分  Eliminate allocation from sbrk()lazy allocation就是在用户程序通过sbrk系统调用申请内存空间时，并不当场给它分配内存，而仅仅是增加p-&gt;sz。当用户程序使用申请的内存时会产生page fault而trap到内核态，此时再分配内存。 第一个实验就是把sbrk中">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://pic2.zhimg.com/80/v2-caf0f6b5fd4f81ed375c9cfd9eb89da9_720w.jpg">
+<meta property="og:image" content="https://pic3.zhimg.com/80/v2-0b9bf1ec112ed8cf8508f97fff8fbff2_720w.jpg">
+<meta property="og:image" content="https://pic2.zhimg.com/80/v2-4625c42a0a109262f033de943e938a39_720w.jpg">
+<meta property="article:published_time" content="2021-04-24T04:00:00.000Z">
+<meta property="article:modified_time" content="2021-11-05T04:49:44.799Z">
+<meta property="article:author" content="Kiseki">
+<meta property="article:tag" content="6.S081">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://pic2.zhimg.com/80/v2-caf0f6b5fd4f81ed375c9cfd9eb89da9_720w.jpg">
+
+<link rel="canonical" href="https://kiseki-zj.github.io/2021/04/24/MIT6.S081%20Lab5/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>MIT6.S081 Lab5 Lazy Allocation | KISEKI</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">KISEKI</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://kiseki-zj.github.io/2021/04/24/MIT6.S081%20Lab5/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/touxiang.JPG">
+      <meta itemprop="name" content="Kiseki">
+      <meta itemprop="description" content=""开心就好啦"">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="KISEKI">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          MIT6.S081 Lab5 Lazy Allocation
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2021-04-24 12:00:00" itemprop="dateCreated datePublished" datetime="2021-04-24T12:00:00+08:00">2021-04-24</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2021-11-05 12:49:44" itemprop="dateModified" datetime="2021-11-05T12:49:44+08:00">2021-11-05</time>
+              </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="实验前准备"><a href="#实验前准备" class="headerlink" title="实验前准备"></a>实验前准备</h2><blockquote>
+<p>阅读xv6 book chapter5，尤其是page fault的部分</p>
+</blockquote>
+<h2 id="Eliminate-allocation-from-sbrk"><a href="#Eliminate-allocation-from-sbrk" class="headerlink" title="Eliminate allocation from sbrk()"></a>Eliminate allocation from sbrk()</h2><p>lazy allocation就是在用户程序通过sbrk系统调用申请内存空间时，并不当场给它分配内存，而仅仅是增加p-&gt;sz。当用户程序使用申请的内存时会产生page fault而trap到内核态，此时再分配内存。</p>
+<p>第一个实验就是把sbrk中分配内存的过程去掉，观察产生的结果：</p>
+<p><img src="https://pic2.zhimg.com/80/v2-caf0f6b5fd4f81ed375c9cfd9eb89da9_720w.jpg" alt="img"></p>
+<p>这里去掉了分配内存的部分，增加了proc的sz</p>
+<p><img src="https://pic3.zhimg.com/80/v2-0b9bf1ec112ed8cf8508f97fff8fbff2_720w.jpg" alt="img"></p>
+<p>之后运行xv6，执行echo hi会产生page fault。这是因为执行echo hi时系统会使用sbrk分配一些内存，当访问到这一部分内存时，由于我们修改了的sbrk并没有真正分配物理内存，就会导致访问的页面不存在。</p>
+<p>这里的输出包含一些信息：</p>
+<blockquote>
+<p>这里输出了SCAUSE寄存器内容，我们可以看到它的值是15，表明这是一个store page fault。<br>产生page fault的进程pid是3<br>我们还可以看到SEPC寄存器的值，是0x12a4，表明产生page fault的指令的地址。<br>最后还可以看到出错的虚拟内存地址，也就是STVAL寄存器的内容，是0x4008。</p>
+</blockquote>
+<p>产生page fault后看到有个panic。这是因为产生页面中断后，内核的做法会杀死当前进程（在usertrap（）中）。进程退出的时候需要free页表，free页表首先会把页表对应项unmap再free物理内存。unmap的时候是从虚拟地址0到p-&gt;sz逐页unmap的，在我们修改的sbrk函数中增加了p-&gt;sz，对应的内存并没有分配并map。因此在uvmunmap的逻辑中就会panic。</p>
+<h2 id="Lazy-allocation"><a href="#Lazy-allocation" class="headerlink" title="Lazy allocation"></a>Lazy allocation</h2><p>在trap.c中加上处理page fault的逻辑，使得echo hi能够正常运行。</p>
+<p>比较简单，仿照课程视频的就行：</p>
+<blockquote>
+<p>在usertrap中处理page fault，如果kalloc失败或者访问的地址va不合法，杀死进程</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line"><span class="keyword">else</span> <span class="keyword">if</span> (r_scause() == <span class="number">13</span> || r_scause() == <span class="number">15</span>) &#123;</span><br><span class="line">    uint64 va = r_stval();</span><br><span class="line">    uint64 ka = (uint64)kalloc();</span><br><span class="line">    <span class="keyword">if</span> (ka == <span class="number">0</span>) &#123;</span><br><span class="line">      p-&gt;killed = <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> <span class="keyword">if</span>(isValid(p, va) == <span class="number">0</span>) &#123;</span><br><span class="line">      kfree((<span class="keyword">void</span>*)ka);</span><br><span class="line">      p-&gt;killed = <span class="number">1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> &#123;</span><br><span class="line">      <span class="built_in">memset</span>((<span class="keyword">void</span>*)ka, <span class="number">0</span>, PGSIZE);</span><br><span class="line">      <span class="keyword">if</span> (mappages(p-&gt;pagetable, PGROUNDDOWN(va), PGSIZE, ka, PTE_U | PTE_R | PTE_W) != <span class="number">0</span>) &#123;</span><br><span class="line">        kfree((<span class="keyword">void</span>*)ka);</span><br><span class="line">        p-&gt;killed = <span class="number">1</span>;</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>判断va是否合法：如果va大于sz或者访问了guard page，则不合法。</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">isValid</span><span class="params">(struct proc *p, uint64 va)</span> </span>&#123;</span><br><span class="line">  uint64 stackbase = PGROUNDDOWN(p-&gt;trapframe-&gt;sp);</span><br><span class="line">  <span class="keyword">if</span> (va &gt;= p-&gt;sz || (va &lt; stackbase+PGSIZE)) </span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>处理unmap的panic：如果某一页并没有分配或并没有map，那么可以跳过这一页而不是panic</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line"><span class="keyword">for</span>(a = va; a &lt; va + npages*PGSIZE; a += PGSIZE)&#123;</span><br><span class="line">    <span class="keyword">if</span>((pte = walk(pagetable, a, <span class="number">0</span>)) == <span class="number">0</span>)</span><br><span class="line">      <span class="comment">//panic(&quot;uvmunmap: walk&quot;);</span></span><br><span class="line">      <span class="keyword">continue</span>;</span><br><span class="line">    <span class="keyword">if</span>((*pte &amp; PTE_V) == <span class="number">0</span>)</span><br><span class="line">      <span class="comment">//panic(&quot;uvmunmap: not mapped&quot;);</span></span><br><span class="line">      <span class="keyword">continue</span>;</span><br><span class="line">    <span class="keyword">if</span>(PTE_FLAGS(*pte) == PTE_V)</span><br><span class="line">      panic(<span class="string">&quot;uvmunmap: not a leaf&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span>(do_free)&#123;</span><br><span class="line">      uint64 pa = PTE2PA(*pte);</span><br><span class="line">      kfree((<span class="keyword">void</span>*)pa);</span><br><span class="line">    &#125;</span><br><span class="line">    *pte = <span class="number">0</span>;</span><br><span class="line">  &#125;</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<h2 id="Lazytests-and-Usertests"><a href="#Lazytests-and-Usertests" class="headerlink" title="Lazytests and Usertests"></a>Lazytests and Usertests</h2><p>完善lazy allocation，保证：</p>
+<p>1.处理sbrk的负数参数</p>
+<p>2.如果va大于sz，杀死进程</p>
+<p>3.在fork中正确处理父进程到子进程的复制过程</p>
+<p>4.处理这样一种情况：系统调用（比如write）传入的虚拟地址对应的内存并没有被分配。</p>
+<p>5.物理内存不足时杀死进程</p>
+<p>6.处理va在user stack以下的情况</p>
+<p>其中2，5，6在上一个实验中已经完成了。isValid函数即处理了2和6。</p>
+<blockquote>
+<p>sys_sbrk()中处理负数参数的情况<br>如果传入的n为负数，则把p-&gt;sz+n到p-&gt;sz的地址范围都dealloc<br>这里加上了两个判断，传入sbrk的参数不合法（即sz+n大于trapframe或小于user stack），sbrk失败，返回-1.<br>之前修改过unmap的部分，dealloc的时候如果某一页不存在，不会panic而是会跳过这一页。</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">uint64</span></span><br><span class="line"><span class="function"><span class="title">sys_sbrk</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">int</span> addr;</span><br><span class="line">  <span class="keyword">int</span> n;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">proc</span> *<span class="title">p</span> =</span> myproc();</span><br><span class="line">  addr = myproc()-&gt;sz;</span><br><span class="line">  uint64 stackbase = PGROUNDDOWN(p-&gt;trapframe-&gt;sp);</span><br><span class="line">  <span class="keyword">if</span>(argint(<span class="number">0</span>, &amp;n) &lt; <span class="number">0</span>)</span><br><span class="line">    <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">  <span class="keyword">if</span> (n &gt; <span class="number">0</span>) &#123;</span><br><span class="line">    p-&gt;sz += n;</span><br><span class="line">    <span class="keyword">if</span> (p-&gt;sz &gt; MAXVA<span class="number">-2</span>*PGSIZE)</span><br><span class="line">      <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">else</span> <span class="keyword">if</span> (n &lt; <span class="number">0</span>) &#123;</span><br><span class="line">    <span class="keyword">if</span> (p-&gt;sz &lt; stackbase+PGSIZE-n) &#123;</span><br><span class="line">      <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> p-&gt;sz = uvmdealloc(p-&gt;pagetable, p-&gt;sz, p-&gt;sz + n);</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> addr;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>在fork时会调用uvmcopy复制一份父进程的内存，在lazy allocation中可能0-&gt;sz中有部分没有真正分配，在uvmcopy中就会导致panic。累次uvmunmap，修改uvmcopy使得在页面不存在时跳过这一页。</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span>(i = <span class="number">0</span>; i &lt; sz; i += PGSIZE)&#123;</span><br><span class="line">    <span class="keyword">if</span>((pte = walk(old, i, <span class="number">0</span>)) == <span class="number">0</span>)</span><br><span class="line">      <span class="comment">//panic(&quot;uvmcopy: pte should exist&quot;);</span></span><br><span class="line">      <span class="keyword">continue</span>;</span><br><span class="line">    <span class="keyword">if</span>((*pte &amp; PTE_V) == <span class="number">0</span>)</span><br><span class="line">      <span class="comment">//panic(&quot;uvmcopy: page not present&quot;);</span></span><br><span class="line">      <span class="keyword">continue</span>;</span><br><span class="line">    pa = PTE2PA(*pte);</span><br><span class="line">    flags = PTE_FLAGS(*pte);</span><br><span class="line">    <span class="keyword">if</span>((mem = kalloc()) == <span class="number">0</span>)</span><br><span class="line">      <span class="keyword">goto</span> err;</span><br><span class="line">    memmove(mem, (<span class="keyword">char</span>*)pa, PGSIZE);</span><br><span class="line">    <span class="keyword">if</span>(mappages(<span class="keyword">new</span>, i, PGSIZE, (uint64)mem, flags) != <span class="number">0</span>)&#123;</span><br><span class="line">      kfree(mem);</span><br><span class="line">      <span class="keyword">goto</span> err;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>处理第4种情况，即系统调用（比如write）传入的虚拟地址对应的内存并没有被分配。<br>首先搞清楚函数执行流程，在调用write后系统trap到内核态，执行copyin来把用户程序va处的内容复制到内核空间，此时若va处并未分配内存，walkaddr会返回0导致系统调用失败。因此我们要做的就是在walkaddr中分配内存。</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">uint64</span></span><br><span class="line"><span class="function"><span class="title">walkaddr</span><span class="params">(<span class="keyword">pagetable_t</span> pagetable, uint64 va)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">pte_t</span> *pte;</span><br><span class="line">  uint64 pa;</span><br><span class="line">      <span class="class"><span class="keyword">struct</span> <span class="title">proc</span> *<span class="title">p</span> =</span> myproc();</span><br><span class="line">  <span class="keyword">if</span>(va &gt;= MAXVA)</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">  pte = walk(pagetable, va, <span class="number">0</span>);</span><br><span class="line">  <span class="keyword">if</span>(pte == <span class="number">0</span> || (*pte &amp; PTE_V) == <span class="number">0</span>) &#123;</span><br><span class="line">    uint64 ka = (uint64)kalloc();</span><br><span class="line">    <span class="keyword">if</span> (ka == <span class="number">0</span>) &#123;</span><br><span class="line">      <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> <span class="keyword">if</span> (isValid(p, va) == <span class="number">0</span>) &#123;</span><br><span class="line">      kfree((<span class="keyword">void</span>*)ka);              <span class="comment">//注意这里也要kfree，不然会导致内存泄漏</span></span><br><span class="line">      <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">else</span> &#123;</span><br><span class="line">      <span class="built_in">memset</span>((<span class="keyword">void</span>*)ka, <span class="number">0</span>, PGSIZE);</span><br><span class="line">      <span class="keyword">if</span> (mappages(p-&gt;pagetable, PGROUNDDOWN(va), PGSIZE, ka, PTE_U | PTE_R | PTE_W) != <span class="number">0</span>) &#123;</span><br><span class="line">        kfree((<span class="keyword">void</span>*)ka);</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">      &#125;</span><br><span class="line">      <span class="keyword">return</span> ka;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span>((*pte &amp; PTE_U) == <span class="number">0</span>)</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">  pa = PTE2PA(*pte);</span><br><span class="line">  <span class="keyword">return</span> pa;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="结果"><a href="#结果" class="headerlink" title="结果"></a>结果</h2><p><img src="https://pic2.zhimg.com/80/v2-4625c42a0a109262f033de943e938a39_720w.jpg" alt="img"></p>
+<h2 id="心得"><a href="#心得" class="headerlink" title="心得"></a>心得</h2><p>usertests失败的时候可以看看test代码是怎么写的从而定位错误。</p>
+<p>测试usertests前记得make clean一下，不然会导致部分test创建文件失败。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/6-S081/" rel="tag"># 6.S081</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2021/04/16/MIT6.S081%20Lab4/" rel="prev" title="MIT6.S081 Lab4 Traps">
+      <i class="fa fa-chevron-left"></i> MIT6.S081 Lab4 Traps
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2021/10/09/MIT6.S081%20Lab6/" rel="next" title="MIT6.S081 Lab6 Cow">
+      MIT6.S081 Lab6 Cow <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%9E%E9%AA%8C%E5%89%8D%E5%87%86%E5%A4%87"><span class="nav-number">1.</span> <span class="nav-text">实验前准备</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Eliminate-allocation-from-sbrk"><span class="nav-number">2.</span> <span class="nav-text">Eliminate allocation from sbrk()</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Lazy-allocation"><span class="nav-number">3.</span> <span class="nav-text">Lazy allocation</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Lazytests-and-Usertests"><span class="nav-number">4.</span> <span class="nav-text">Lazytests and Usertests</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BB%93%E6%9E%9C"><span class="nav-number">5.</span> <span class="nav-text">结果</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%BF%83%E5%BE%97"><span class="nav-number">6.</span> <span class="nav-text">心得</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Kiseki"
+      src="/images/touxiang.JPG">
+  <p class="site-author-name" itemprop="name">Kiseki</p>
+  <div class="site-description" itemprop="description">"开心就好啦"</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">7</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-name">标签</span>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/kiseki-zj" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;kiseki-zj" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="https://beian.miit.gov.cn/" rel="noopener" target="_blank">null </a>
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Kiseki</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>

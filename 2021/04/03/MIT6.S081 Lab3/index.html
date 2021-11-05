@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"kiseki-zj.github.io","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"right","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"style":"mac"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="实验前准备 阅读vm.c,proc.c,exec.c,看明白xv6怎么初始化内核页表以及怎么实现内存isolation的.阅读trap.c,trampoline.S,明白用户程序陷入内核态以及从内核态返回用户态的过程.阅读xv6book chapter3&amp;chapter4.  Print a page table第一个实验要求实现一个函数vmprint(pagetable_t pageta">
+<meta property="og:type" content="article">
+<meta property="og:title" content="MIT6.S081 Lab3 Pgtbl">
+<meta property="og:url" content="https://kiseki-zj.github.io/2021/04/03/MIT6.S081%20Lab3/index.html">
+<meta property="og:site_name" content="KISEKI">
+<meta property="og:description" content="实验前准备 阅读vm.c,proc.c,exec.c,看明白xv6怎么初始化内核页表以及怎么实现内存isolation的.阅读trap.c,trampoline.S,明白用户程序陷入内核态以及从内核态返回用户态的过程.阅读xv6book chapter3&amp;chapter4.  Print a page table第一个实验要求实现一个函数vmprint(pagetable_t pageta">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://pic1.zhimg.com/80/v2-d992e535c19abc307ea2230979f5c53c_720w.jpg">
+<meta property="og:image" content="https://pic3.zhimg.com/80/v2-d0566e3093b15954bdaedd4d1fcdf192_720w.jpg">
+<meta property="article:published_time" content="2021-04-03T04:00:00.000Z">
+<meta property="article:modified_time" content="2021-11-05T04:49:44.798Z">
+<meta property="article:author" content="Kiseki">
+<meta property="article:tag" content="6.S081">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://pic1.zhimg.com/80/v2-d992e535c19abc307ea2230979f5c53c_720w.jpg">
+
+<link rel="canonical" href="https://kiseki-zj.github.io/2021/04/03/MIT6.S081%20Lab3/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>MIT6.S081 Lab3 Pgtbl | KISEKI</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">KISEKI</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://kiseki-zj.github.io/2021/04/03/MIT6.S081%20Lab3/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/touxiang.JPG">
+      <meta itemprop="name" content="Kiseki">
+      <meta itemprop="description" content=""开心就好啦"">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="KISEKI">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          MIT6.S081 Lab3 Pgtbl
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2021-04-03 12:00:00" itemprop="dateCreated datePublished" datetime="2021-04-03T12:00:00+08:00">2021-04-03</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2021-11-05 12:49:44" itemprop="dateModified" datetime="2021-11-05T12:49:44+08:00">2021-11-05</time>
+              </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h3 id="实验前准备"><a href="#实验前准备" class="headerlink" title="实验前准备"></a>实验前准备</h3><blockquote>
+<p>阅读vm.c,proc.c,exec.c,看明白xv6怎么初始化内核页表以及怎么实现内存isolation的.阅读trap.c,trampoline.S,明白用户程序陷入内核态以及从内核态返回用户态的过程.<br>阅读xv6book chapter3&amp;chapter4.</p>
+</blockquote>
+<h3 id="Print-a-page-table"><a href="#Print-a-page-table" class="headerlink" title="Print a page table"></a>Print a page table</h3><p>第一个实验要求实现一个函数vmprint(pagetable_t pagetable),输出页表的内容.其实就是仿照walk模拟硬件翻译的过程,中间把页表项的值输出就可以了.比较简单:</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">void</span> _vmprint(<span class="keyword">pagetable_t</span> pagetable, uint64 depth) &#123;</span><br><span class="line">  <span class="keyword">if</span> (depth == <span class="number">1</span>) </span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;page table %p\n&quot;</span>, pagetable);</span><br><span class="line">  <span class="keyword">if</span> (depth == <span class="number">4</span>) <span class="keyword">return</span>;</span><br><span class="line">  <span class="keyword">for</span> (<span class="keyword">int</span> i = <span class="number">0</span>; i &lt; <span class="number">512</span>; i++) &#123;</span><br><span class="line">    <span class="keyword">pte_t</span> pte = pagetable[i];</span><br><span class="line">    <span class="keyword">if</span> (pte &amp; PTE_V) &#123;</span><br><span class="line">      <span class="built_in">printf</span>(<span class="string">&quot;..&quot;</span>);</span><br><span class="line">      <span class="keyword">for</span> (<span class="keyword">int</span> j = <span class="number">1</span>; j &lt; depth; j++)</span><br><span class="line">        <span class="built_in">printf</span>(<span class="string">&quot; ..&quot;</span>);</span><br><span class="line">      <span class="built_in">printf</span>(<span class="string">&quot;%d: pte %p pa %p\n&quot;</span>, i, pte, PTE2PA(pte));</span><br><span class="line">      _vmprint((<span class="keyword">pagetable_t</span>)PTE2PA(pte), depth+<span class="number">1</span>);</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">vmprint</span><span class="params">(<span class="keyword">pagetable_t</span> pagetable)</span> </span>&#123;</span><br><span class="line">  _vmprint(pagetable, <span class="number">1</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这个实验主要是为了后面实验debug用.</p>
+<h3 id="A-kernel-page-table-per-process"><a href="#A-kernel-page-table-per-process" class="headerlink" title="A kernel page table per process"></a>A kernel page table per process</h3><p>xv6为每个进程分配了一个用户页表,在用户态时使用的是当前进程的pagetable,当陷入内核态时会把satp切换为全局的内核页表kernel_pagetable (trampoline.S 78行).kernel_pagetable使用了direct map,把虚拟内存直接map到物理内存,同时也初始化了一些设备地址(kvminit()).如下图</p>
+<p><img src="https://pic1.zhimg.com/80/v2-d992e535c19abc307ea2230979f5c53c_720w.jpg" alt="img"></p>
+<p>当用户程序调用系统调用传入一个地址时需要在内核态进行翻译获得物理地址.举个例子,程序使用write系统调用传入一个buf,这个buf本质是一个地址,假设为a,它对应的物理地址是b.那么系统陷入到内核态后,由于此时的页表是kernel_pagetable而不是用户的pagetable,kernel_pagetable并没有地址a的对应关系,因此需要通过walk模拟MMU来获得a在用户pagetable中的物理地址即b.</p>
+<p>这个实验和下一个实验就是要求为每个进程分配一个kpagetable,当用户陷入内核态时切换到kpagetable而不是全局的kernel_pagetable.这个kpagetable的内容要求有3个:</p>
+<p>1.内容和kernel_pagetable基本一样使得在内核态时能够使用内核的代码和数据</p>
+<p>2.在trampoline下面是进程的内核栈,kpagetable只能把本进程对应的内核栈map好.其他进程的不能map</p>
+<p>3.最重要的一点,由于进程的va从0开始且连续增长,我们在kpagetable中也要保存进程va和pa的对应关系,这样在内核态时可以直接使用用户空间的虚拟地址.以上述例子来说,内核态可以直接使用地址a,因为硬件会自动把a翻译为物理地址b.</p>
+<p>这个实验要求完成前两点,下个实验要求完成第3点.</p>
+<blockquote>
+<p>proc.h</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">pagetable_t</span> kpagetable;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>allocproc() 加入初始化kpagetable的过程,proc_kernel_kvminit()类似kvminit把物理内存和设备以及trampoline的地址map好.<br>kprocinit()用来map本进程的内核栈</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line"><span class="comment">// An empty user page table.</span></span><br><span class="line">  p-&gt;pagetable = proc_pagetable(p);</span><br><span class="line">  <span class="keyword">if</span>(p-&gt;pagetable == <span class="number">0</span>)&#123;</span><br><span class="line">    freeproc(p);</span><br><span class="line">    release(&amp;p-&gt;lock);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="comment">//lab3 step2</span></span><br><span class="line"></span><br><span class="line">  p-&gt;kpagetable = proc_kernel_kvminit(p);</span><br><span class="line">  <span class="keyword">if</span>(p-&gt;kpagetable == <span class="number">0</span>)&#123;</span><br><span class="line">    freeproc(p);</span><br><span class="line">    release(&amp;p-&gt;lock);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  kprocinit(p);</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>proc_kernel_kvminit()<br>这里面的proc_kvmmap和kvmmap一样,只不过加了参数指定pagetable</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">pagetable_t</span></span></span><br><span class="line"><span class="function"><span class="title">proc_kernel_kvminit</span><span class="params">(struct proc *p)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">pagetable_t</span> pagetable;</span><br><span class="line">  pagetable = (<span class="keyword">pagetable_t</span>) kalloc();</span><br><span class="line">  <span class="built_in">memset</span>(pagetable, <span class="number">0</span>, PGSIZE);</span><br><span class="line">  <span class="comment">// uart registers</span></span><br><span class="line">  proc_kvmmap(pagetable, UART0, UART0, PGSIZE, PTE_R | PTE_W);</span><br><span class="line">  <span class="comment">// virtio mmio disk interface</span></span><br><span class="line">  proc_kvmmap(pagetable, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// CLINT</span></span><br><span class="line">  proc_kvmmap(pagetable, CLINT, CLINT, <span class="number">0x10000</span>, PTE_R | PTE_W);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// PLIC</span></span><br><span class="line">  proc_kvmmap(pagetable, PLIC, PLIC, <span class="number">0x400000</span>, PTE_R | PTE_W);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// map kernel text executable and read-only.</span></span><br><span class="line">  proc_kvmmap(pagetable, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// map kernel data and the physical RAM we&#x27;ll make use of.</span></span><br><span class="line">  proc_kvmmap(pagetable, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);</span><br><span class="line">  <span class="comment">// map the trampoline for trap entry/exit to</span></span><br><span class="line">  <span class="comment">// the highest virtual address in the kernel.</span></span><br><span class="line">  proc_kvmmap(pagetable, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);</span><br><span class="line">  <span class="keyword">return</span> pagetable;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>void kprocinit(struct proc *p)<br>内核栈物理内存在procinit()时就已经alloc好了,所以只要在页表里map一下就行</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">kprocinit</span><span class="params">(struct proc *p)</span> </span>&#123;</span><br><span class="line">  uint64 va = KSTACK((<span class="keyword">int</span>) (p - proc));</span><br><span class="line">  uint64 pa = kvmpa(va);</span><br><span class="line">  <span class="comment">//printf(&quot;p-&gt;kstack = %p\n&quot;, KSTACK((int) (p - proc)));</span></span><br><span class="line">  proc_kvmmap(p-&gt;kpagetable, (uint64)va, (uint64)pa, PGSIZE, PTE_R | PTE_W);</span><br><span class="line">  p-&gt;kstack = va;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>freeproc()<br>加入free kpagetable的过程,首先把用户空间的地址都unmap掉(这是第三个实验要做的),然后proc_free_kpagetable用来free页表.</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span></span></span><br><span class="line"><span class="function"><span class="title">freeproc</span><span class="params">(struct proc *p)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">if</span>(p-&gt;trapframe)</span><br><span class="line">    kfree((<span class="keyword">void</span>*)p-&gt;trapframe);</span><br><span class="line">  p-&gt;trapframe = <span class="number">0</span>;</span><br><span class="line">  <span class="keyword">if</span>(p-&gt;pagetable)</span><br><span class="line">    proc_freepagetable(p-&gt;pagetable, p-&gt;sz);</span><br><span class="line"></span><br><span class="line">  uvmunmap(p-&gt;kpagetable, <span class="number">0</span>, PGROUNDUP(p-&gt;sz) / PGSIZE, <span class="number">0</span>);</span><br><span class="line">  <span class="comment">//lab3 step2</span></span><br><span class="line">  <span class="keyword">if</span> (p-&gt;kpagetable)</span><br><span class="line">    proc_free_kpagetable(p);</span><br><span class="line">  p-&gt;pagetable = <span class="number">0</span>;</span><br><span class="line">  p-&gt;kpagetable = <span class="number">0</span>;</span><br><span class="line">  p-&gt;sz = <span class="number">0</span>;</span><br><span class="line">  p-&gt;pid = <span class="number">0</span>;</span><br><span class="line">  p-&gt;parent = <span class="number">0</span>;</span><br><span class="line">  p-&gt;name[<span class="number">0</span>] = <span class="number">0</span>;</span><br><span class="line">  p-&gt;chan = <span class="number">0</span>;</span><br><span class="line">  p-&gt;killed = <span class="number">0</span>;</span><br><span class="line">  p-&gt;xstate = <span class="number">0</span>;</span><br><span class="line">  p-&gt;state = UNUSED;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>kuvmunmap和uvmunmap相比去掉了panic,这是因为第三个实验map用户地址时会把底层某些地址覆盖掉,然后如果再unmap掉部分虚拟地址,就会导致中间有的地址unmap.比如UART0是0x1000000,如果用户虚拟地址增长到了0x1001000,再sbrk(-1000)删除一页,这样0x1000000-&gt;0x1001000这部分页表是空的,此时freeproc执行kuvmunmap(p-&gt;kpagetable, UART0, 1, 0)时就会出现not mapped的panic.</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">proc_free_kpagetable</span><span class="params">(struct proc *p)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  kuvmunmap(p-&gt;kpagetable, TRAMPOLINE, <span class="number">1</span>, <span class="number">0</span>);</span><br><span class="line">  kuvmunmap(p-&gt;kpagetable, KSTACK((<span class="keyword">int</span>) (p - proc)), <span class="number">1</span>, <span class="number">0</span>);</span><br><span class="line">  kuvmunmap(p-&gt;kpagetable, UART0, <span class="number">1</span>, <span class="number">0</span>);</span><br><span class="line">  kuvmunmap(p-&gt;kpagetable, VIRTIO0, <span class="number">1</span>, <span class="number">0</span>);</span><br><span class="line">  kuvmunmap(p-&gt;kpagetable, CLINT, <span class="number">0x10000</span> / PGSIZE, <span class="number">0</span>);</span><br><span class="line">  kuvmunmap(p-&gt;kpagetable, PLIC, <span class="number">0x400000</span> / PGSIZE, <span class="number">0</span>);</span><br><span class="line">  kuvmunmap(p-&gt;kpagetable, KERNBASE, (uint64)(etext-KERNBASE) / PGSIZE, <span class="number">0</span>);</span><br><span class="line">  kuvmunmap(p-&gt;kpagetable, (uint64)etext, (PHYSTOP-(uint64)etext) / PGSIZE, <span class="number">0</span>);</span><br><span class="line">  freewalk(p-&gt;kpagetable);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>scheduler()<br>切换进程前切换到对应的kpagetable,某进程退出后回到scheduler使用全局kernel_pagetable</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">for</span>(p = proc; p &lt; &amp;proc[NPROC]; p++) &#123;</span><br><span class="line">      acquire(&amp;p-&gt;lock);</span><br><span class="line">      <span class="keyword">if</span>(p-&gt;state == RUNNABLE) &#123;</span><br><span class="line">        <span class="comment">// Switch to chosen process.  It is the process&#x27;s job</span></span><br><span class="line">        <span class="comment">// to release its lock and then reacquire it</span></span><br><span class="line">        <span class="comment">// before jumping back to us.</span></span><br><span class="line">        p-&gt;state = RUNNING;</span><br><span class="line">        c-&gt;proc = p;</span><br><span class="line">        <span class="comment">//lab3 step2</span></span><br><span class="line">        w_satp(MAKE_SATP(p-&gt;kpagetable));</span><br><span class="line">        sfence_vma();</span><br><span class="line"></span><br><span class="line">        swtch(&amp;c-&gt;context, &amp;p-&gt;context);</span><br><span class="line"></span><br><span class="line">        <span class="comment">// Process is done running for now.</span></span><br><span class="line">        <span class="comment">// It should have changed its p-&gt;state before coming back.</span></span><br><span class="line"></span><br><span class="line">        <span class="comment">//lab3 step2</span></span><br><span class="line">        w_satp(MAKE_SATP(kernel_pagetable));</span><br><span class="line">        sfence_vma();</span><br><span class="line"></span><br><span class="line">        c-&gt;proc = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">        found = <span class="number">1</span>;</span><br><span class="line">      &#125;</span><br><span class="line">      release(&amp;p-&gt;lock);</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="Simplify-copyin-copyinstr"><a href="#Simplify-copyin-copyinstr" class="headerlink" title="Simplify copyin/copyinstr"></a>Simplify copyin/copyinstr</h3><p>这个实验要完成第3个条件,在kpagetable把用户空间的虚拟地址也map好.hints已经告诉我们在exec(),fork(),growproc()里修改kpagetable就可以了,因为只有这些函数会修改用户pagetable.</p>
+<blockquote>
+<p>exec()<br>这里的逻辑就是把kpagetable底部用户空间的部分先全部unmap掉,再把用户pagetable的内容通过kuvmcopy复制到kpagetable里<br>之所以unmap时不需要free掉物理内存,是因为下面proc_freepagetable(oldpagetable, oldsz)把原先的pagetable释放掉同时free了对应的物理内存.</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line">oldpagetable = p-&gt;pagetable;</span><br><span class="line">  p-&gt;pagetable = pagetable;</span><br><span class="line">  p-&gt;sz = sz;</span><br><span class="line">  p-&gt;trapframe-&gt;epc = elf.entry;  <span class="comment">// initial program counter = main</span></span><br><span class="line">  p-&gt;trapframe-&gt;sp = sp; <span class="comment">// initial stack pointer</span></span><br><span class="line">  <span class="comment">//lab3 step3</span></span><br><span class="line">  uvmunmap(p-&gt;kpagetable, <span class="number">0</span>, PGROUNDUP(oldsz) / PGSIZE, <span class="number">0</span>);</span><br><span class="line">  <span class="keyword">if</span> (kuvmcopy(p, sz, PTE_R|PTE_W|PTE_X) != <span class="number">0</span>) &#123;</span><br><span class="line">    panic(<span class="string">&quot;kuvmcopy&quot;</span>);</span><br><span class="line">  &#125;</span><br><span class="line">  w_satp(MAKE_SATP(p-&gt;kpagetable));</span><br><span class="line">  sfence_vma();</span><br><span class="line">  proc_freepagetable(oldpagetable, oldsz);</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>kuvmcopy()<br>把进程new的pagetable底部(即不包含trampoline和trapframe)复制给kpagetable<br>函数mappages_remap和mappages相比去掉了remap的panic,理由在step2里提到了,kpagetable在map时可能需要覆盖某些设备的地址.</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">kuvmcopy</span><span class="params">(struct proc *<span class="keyword">new</span>, uint64 sz, <span class="keyword">int</span> perm)</span> </span>&#123;</span><br><span class="line">  <span class="keyword">pte_t</span> *pte;</span><br><span class="line">  uint64 pa, i;</span><br><span class="line">  <span class="keyword">pagetable_t</span> newpg = <span class="keyword">new</span>-&gt;pagetable;</span><br><span class="line">  <span class="keyword">for</span>(i = <span class="number">0</span>; i &lt; sz; i += PGSIZE)&#123;</span><br><span class="line">    <span class="keyword">if</span>((pte = walk(newpg, i, <span class="number">0</span>)) == <span class="number">0</span>)</span><br><span class="line">      panic(<span class="string">&quot;uvmcopy: pte should exist&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span>((*pte &amp; PTE_V) == <span class="number">0</span>)</span><br><span class="line">      panic(<span class="string">&quot;uvmcopy: page not present&quot;</span>);</span><br><span class="line">    pa = PTE2PA(*pte);</span><br><span class="line">    <span class="keyword">if</span>(mappages_remap(<span class="keyword">new</span>-&gt;kpagetable, i, PGSIZE, pa, perm) != <span class="number">0</span>)&#123;</span><br><span class="line">      <span class="keyword">goto</span> err;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line"> err:</span><br><span class="line">  uvmunmap(<span class="keyword">new</span>-&gt;kpagetable, <span class="number">0</span>, i / PGSIZE, <span class="number">1</span>);</span><br><span class="line">  <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>fork()<br>同理把fork出来的子进程的用户pagetable复制给kpagetable,注意flag不能有PTE_U,因为cpu在suprivisor模式时不能访问设置PTE_U的页</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line"><span class="comment">// Copy user memory from parent to child.</span></span><br><span class="line">  <span class="keyword">if</span>(uvmcopy(p-&gt;pagetable, np-&gt;pagetable, p-&gt;sz) &lt; <span class="number">0</span>)&#123;</span><br><span class="line">    freeproc(np);</span><br><span class="line">    release(&amp;np-&gt;lock);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">if</span>(kuvmcopy(np, p-&gt;sz, PTE_R|PTE_W|PTE_X) &lt; <span class="number">0</span>)&#123;</span><br><span class="line">    freeproc(np);</span><br><span class="line">    release(&amp;np-&gt;lock);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>growproc()<br>这个稍微麻烦一点,用户空间增长n时要同时在pagetable和kpagetable进行map,同理n&lt;0也要.</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span></span></span><br><span class="line"><span class="function"><span class="title">growproc</span><span class="params">(<span class="keyword">int</span> n)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  uint sz;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">proc</span> *<span class="title">p</span> =</span> myproc();</span><br><span class="line">  <span class="comment">//lab3 step3</span></span><br><span class="line"></span><br><span class="line">  uint oldsz;</span><br><span class="line">  oldsz = sz = p-&gt;sz;</span><br><span class="line">  <span class="keyword">if</span>(n &gt; <span class="number">0</span>)&#123;</span><br><span class="line">    sz = kuvmalloc(p, sz, sz + n);</span><br><span class="line">    <span class="keyword">if</span>( sz == <span class="number">0</span> ) &#123;</span><br><span class="line">      <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (sz &gt; PLIC) &#123;</span><br><span class="line">      kuvmdealloc(p, sz, oldsz);</span><br><span class="line">      <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125; <span class="keyword">else</span> <span class="keyword">if</span>(n &lt; <span class="number">0</span>)&#123;</span><br><span class="line">      sz = kuvmdealloc(p, sz, sz + n);</span><br><span class="line">  &#125; </span><br><span class="line">  p-&gt;sz = sz;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>kuvmalloc()<br>和uvmalloc相比加入了给kpagetable进行map的过程,注意在mappages_remap返回-1的时候要不仅要free物理内存,还要把之前mappages()时用户pagetable给unmap掉,一直过不去sbrkfail这个test的原因就是这个.<br>具体来说,比如内存还剩100,kuvmalloc分配第99页后不会触发mem=0,但是执行mappages会把物理内存剩的最后一页用于分配页表,此时执行mappages_remap就会失败(因为没有物理内存了),在这个逻辑下是不应该分配这个第99页的.如果直接执行kuvmdealloc会把用户pagetable第99页的map关系保留下来,导致最后freeproc时panic leaf map.</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">uint64</span></span><br><span class="line"><span class="function"><span class="title">kuvmalloc</span><span class="params">(struct proc *p, uint64 oldsz, uint64 newsz)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">char</span> *mem;</span><br><span class="line">  uint64 a;</span><br><span class="line">  <span class="keyword">pagetable_t</span> pagetable = p-&gt;pagetable;</span><br><span class="line">  <span class="keyword">pagetable_t</span> kpagetable = p-&gt;kpagetable;</span><br><span class="line">  <span class="keyword">if</span>(newsz &lt; oldsz)</span><br><span class="line">    <span class="keyword">return</span> oldsz;</span><br><span class="line">  oldsz = PGROUNDUP(oldsz);</span><br><span class="line">  <span class="keyword">for</span>(a = oldsz; a &lt; newsz; a += PGSIZE)&#123;</span><br><span class="line">    mem = kalloc();</span><br><span class="line">    <span class="keyword">if</span>(mem == <span class="number">0</span>)&#123;</span><br><span class="line">      kuvmdealloc(p, a, oldsz);    </span><br><span class="line">      <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">memset</span>(mem, <span class="number">0</span>, PGSIZE);    </span><br><span class="line">    <span class="keyword">if</span>(mappages(pagetable, a, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != <span class="number">0</span>)&#123;</span><br><span class="line">      kfree(mem);</span><br><span class="line">      kuvmdealloc(p, a, oldsz);</span><br><span class="line">      <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (mappages_remap(kpagetable, a, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R) != <span class="number">0</span>) &#123;</span><br><span class="line">      kfree(mem);</span><br><span class="line">      uvmunmap(pagetable, a, <span class="number">1</span>, <span class="number">0</span>);</span><br><span class="line">      kuvmdealloc(p, a, oldsz);</span><br><span class="line">      <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    &#125;    </span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> newsz;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>kuvmdealloc()<br>仿照uvmdealloc就行</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">uint64</span></span><br><span class="line"><span class="function"><span class="title">kuvmdealloc</span><span class="params">(struct proc *p, uint64 oldsz, uint64 newsz)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">pagetable_t</span> pagetable = p-&gt;pagetable;</span><br><span class="line">  <span class="keyword">pagetable_t</span> kpagetable = p-&gt;kpagetable;</span><br><span class="line">  <span class="keyword">if</span>(newsz &gt;= oldsz)</span><br><span class="line">    <span class="keyword">return</span> oldsz;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span>(PGROUNDUP(newsz) &lt; PGROUNDUP(oldsz))&#123;</span><br><span class="line">    <span class="keyword">int</span> npages = (PGROUNDUP(oldsz) - PGROUNDUP(newsz)) / PGSIZE;</span><br><span class="line">    uvmunmap(pagetable, PGROUNDUP(newsz), npages, <span class="number">1</span>);</span><br><span class="line">    kuvmunmap(kpagetable, PGROUNDUP(newsz), npages, <span class="number">0</span>);</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> newsz;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="实验结果"><a href="#实验结果" class="headerlink" title="实验结果"></a>实验结果</h3><p><img src="https://pic3.zhimg.com/80/v2-d0566e3093b15954bdaedd4d1fcdf192_720w.jpg" alt="img"></p>
+<h3 id="心得"><a href="#心得" class="headerlink" title="心得"></a>心得</h3><p>主要是要先看懂几个重要函数的作用,弄懂陷入内核态和返回用户态的过程,理解内核页表和用户页表的内存分布,搞清楚实验目的是什么.接下来就是耐心debug了,如果usertests某些测试一直通不过可以看一下这个test做了些什么,以此定位哪里的代码可能出错.</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/6-S081/" rel="tag"># 6.S081</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item"></div>
+      <div class="post-nav-item">
+    <a href="/2021/04/16/MIT6.S081%20Lab4/" rel="next" title="MIT6.S081 Lab4 Traps">
+      MIT6.S081 Lab4 Traps <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%9E%E9%AA%8C%E5%89%8D%E5%87%86%E5%A4%87"><span class="nav-number">1.</span> <span class="nav-text">实验前准备</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Print-a-page-table"><span class="nav-number">2.</span> <span class="nav-text">Print a page table</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#A-kernel-page-table-per-process"><span class="nav-number">3.</span> <span class="nav-text">A kernel page table per process</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Simplify-copyin-copyinstr"><span class="nav-number">4.</span> <span class="nav-text">Simplify copyin&#x2F;copyinstr</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AE%9E%E9%AA%8C%E7%BB%93%E6%9E%9C"><span class="nav-number">5.</span> <span class="nav-text">实验结果</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%BF%83%E5%BE%97"><span class="nav-number">6.</span> <span class="nav-text">心得</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Kiseki"
+      src="/images/touxiang.JPG">
+  <p class="site-author-name" itemprop="name">Kiseki</p>
+  <div class="site-description" itemprop="description">"开心就好啦"</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">7</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-name">标签</span>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/kiseki-zj" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;kiseki-zj" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="https://beian.miit.gov.cn/" rel="noopener" target="_blank">null </a>
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Kiseki</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>

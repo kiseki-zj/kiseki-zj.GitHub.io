@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"kiseki-zj.github.io","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"right","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"style":"mac"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Uthread: switching between threads这个lab要求完善一个用户态线程库，比较简单  首先创建线程时把context的ra设置为传入的函数地址，这样第一次scheduler到这个线程可以返回到执行函数。注意stack是从上往下增长的，所以sp的值初始化为对应stack的顶部。实际上thread[0].stack是没有用到的，因为main线程一直使用的都是进程分配好的栈">
+<meta property="og:type" content="article">
+<meta property="og:title" content="MIT6.S081 Lab7 Multithreading">
+<meta property="og:url" content="https://kiseki-zj.github.io/2021/10/12/MIT6.S081%20Lab7/index.html">
+<meta property="og:site_name" content="KISEKI">
+<meta property="og:description" content="Uthread: switching between threads这个lab要求完善一个用户态线程库，比较简单  首先创建线程时把context的ra设置为传入的函数地址，这样第一次scheduler到这个线程可以返回到执行函数。注意stack是从上往下增长的，所以sp的值初始化为对应stack的顶部。实际上thread[0].stack是没有用到的，因为main线程一直使用的都是进程分配好的栈">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://pic2.zhimg.com/80/v2-0e04ba414726a4cb23de4791fb4f4ca9_720w.jpg">
+<meta property="article:published_time" content="2021-10-12T04:00:00.000Z">
+<meta property="article:modified_time" content="2021-11-05T04:49:44.801Z">
+<meta property="article:author" content="Kiseki">
+<meta property="article:tag" content="6.S081">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://pic2.zhimg.com/80/v2-0e04ba414726a4cb23de4791fb4f4ca9_720w.jpg">
+
+<link rel="canonical" href="https://kiseki-zj.github.io/2021/10/12/MIT6.S081%20Lab7/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>MIT6.S081 Lab7 Multithreading | KISEKI</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">KISEKI</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://kiseki-zj.github.io/2021/10/12/MIT6.S081%20Lab7/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/touxiang.JPG">
+      <meta itemprop="name" content="Kiseki">
+      <meta itemprop="description" content=""开心就好啦"">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="KISEKI">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          MIT6.S081 Lab7 Multithreading
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2021-10-12 12:00:00" itemprop="dateCreated datePublished" datetime="2021-10-12T12:00:00+08:00">2021-10-12</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2021-11-05 12:49:44" itemprop="dateModified" datetime="2021-11-05T12:49:44+08:00">2021-11-05</time>
+              </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="Uthread-switching-between-threads"><a href="#Uthread-switching-between-threads" class="headerlink" title="Uthread: switching between threads"></a>Uthread: switching between threads</h2><p>这个lab要求完善一个用户态线程库，比较简单</p>
+<blockquote>
+<p>首先创建线程时把context的ra设置为传入的函数地址，这样第一次scheduler到这个线程可以返回到执行函数。<br>注意stack是从上往下增长的，所以sp的值初始化为对应stack的顶部。<br>实际上thread[0].stack是没有用到的，因为main线程一直使用的都是进程分配好的栈区域，其他stack被分配在data段。</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> </span></span><br><span class="line"><span class="function"><span class="title">thread_create</span><span class="params">(<span class="keyword">void</span> (*func)())</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">thread</span> *<span class="title">t</span>;</span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">for</span> (t = all_thread; t &lt; all_thread + MAX_THREAD; t++) &#123;</span><br><span class="line">    <span class="keyword">if</span> (t-&gt;state == FREE) <span class="keyword">break</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  t-&gt;state = RUNNABLE;</span><br><span class="line">  <span class="comment">// YOUR CODE HERE</span></span><br><span class="line">  t-&gt;context.ra = (uint64)func;</span><br><span class="line">  t-&gt;context.sp = (uint64)t-&gt;<span class="built_in">stack</span>+STACK_SIZE;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>sheduler函数中，找到一个RUNNABLE的线程就进行切换</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (current_thread != next_thread) &#123;         <span class="comment">/* switch threads?  */</span></span><br><span class="line">    next_thread-&gt;state = RUNNING;</span><br><span class="line">    t = current_thread;</span><br><span class="line">    current_thread = next_thread;</span><br><span class="line">    <span class="comment">/* YOUR CODE HERE</span></span><br><span class="line"><span class="comment">     * Invoke thread_switch to switch from t to next_thread:</span></span><br><span class="line"><span class="comment">     * thread_switch(??, ??);</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    thread_switch((uint64)(&amp;t-&gt;context), (uint64)(&amp;current_thread-&gt;context));</span><br><span class="line">  &#125; <span class="keyword">else</span></span><br><span class="line">    next_thread = <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>thread_switch代码和swtch一样</p>
+</blockquote>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line">thread_switch:</span><br><span class="line">	/* YOUR CODE HERE */</span><br><span class="line">        sd ra, 0(a0)</span><br><span class="line">        sd sp, 8(a0)</span><br><span class="line">        sd s0, 16(a0)</span><br><span class="line">        sd s1, 24(a0)</span><br><span class="line">        sd s2, 32(a0)</span><br><span class="line">        sd s3, 40(a0)</span><br><span class="line">        sd s4, 48(a0)</span><br><span class="line">        sd s5, 56(a0)</span><br><span class="line">        sd s6, 64(a0)</span><br><span class="line">        sd s7, 72(a0)</span><br><span class="line">        sd s8, 80(a0)</span><br><span class="line">        sd s9, 88(a0)</span><br><span class="line">        sd s10, 96(a0)</span><br><span class="line">        sd s11, 104(a0)</span><br><span class="line"></span><br><span class="line">        ld ra, 0(a1)</span><br><span class="line">        ld sp, 8(a1)</span><br><span class="line">        ld s0, 16(a1)</span><br><span class="line">        ld s1, 24(a1)</span><br><span class="line">        ld s2, 32(a1)</span><br><span class="line">        ld s3, 40(a1)</span><br><span class="line">        ld s4, 48(a1)</span><br><span class="line">        ld s5, 56(a1)</span><br><span class="line">        ld s6, 64(a1)</span><br><span class="line">        ld s7, 72(a1)</span><br><span class="line">        ld s8, 80(a1)</span><br><span class="line">        ld s9, 88(a1)</span><br><span class="line">        ld s10, 96(a1)</span><br><span class="line">        ld s11, 104(a1)</span><br><span class="line">	</span><br><span class="line">	ret    /* return to ra */</span><br></pre></td></tr></table></figure>
+
+<p>另外需要定义struct context并作为thread类的一个成员变量</p>
+<h2 id="Using-threads"><a href="#Using-threads" class="headerlink" title="Using threads"></a>Using threads</h2><p>这个lab展示了如何使用linux pthread线程库。程序定义了一个链式哈希表并向其中put 10000个kv数据对。创建多个线程执行put操作时，效率会有所提高但会产生miss的情况，也就是一些key并没有成功写入hash table。原因是线程对hash table的操作没有加锁。例如线程t1要对其中某个链表进行e1的头插，当执行完 e-&gt;next = n后切换到线程t2，线程t2同样要对该链表进行e2的头插，也运行到e-&gt;next = n。</p>
+<p>这时候有两种情况：t1先执行 *p = e，这样就丢失了e2这个数据；t2先执行 *p = e;，这样会丢失e1.所以需要对共享数据加锁。最简单的方法是对整个hash table加锁，每次put前都需要acquire这个锁，但这样效率很低，所有put操作相当于都串行操作了。hints告诉我们实际上只要对hash table的每个bucket加锁就行，因为不同bucket的插入操作彼此互不影响。</p>
+<p>代码的话比较简单，主要是熟悉pthread库的mutex锁的使用。</p>
+<blockquote>
+<p>lock定义了每个bucket的锁，put时加锁即可。</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">...</span><br><span class="line"><span class="keyword">pthread_mutex_t</span> lock[NBUCKET];</span><br><span class="line">...</span><br><span class="line"><span class="function"><span class="keyword">static</span> </span></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">put</span><span class="params">(<span class="keyword">int</span> key, <span class="keyword">int</span> value)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">int</span> i = key % NBUCKET;</span><br><span class="line"></span><br><span class="line">  <span class="comment">// is the key already present?</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">entry</span> *<span class="title">e</span> =</span> <span class="number">0</span>;</span><br><span class="line">  pthread_mutex_lock(&amp;lock[i]);</span><br><span class="line">  <span class="keyword">for</span> (e = table[i]; e != <span class="number">0</span>; e = e-&gt;next) &#123;</span><br><span class="line">    <span class="keyword">if</span> (e-&gt;key == key)</span><br><span class="line">      <span class="keyword">break</span>;i</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">if</span>(e)&#123;</span><br><span class="line">    <span class="comment">// update the existing key.</span></span><br><span class="line">    e-&gt;value = value;</span><br><span class="line">  &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="comment">// the new is new.</span></span><br><span class="line">    insert(key, value, &amp;table[i], table[i]);</span><br><span class="line">  &#125;</span><br><span class="line">  pthread_mutex_unlock(&amp;lock[i]);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="Barrier"><a href="#Barrier" class="headerlink" title="Barrier"></a>Barrier</h2><p>程序开始创建了多个线程，要求每个线程都运行到barrier函数就sleep，直到所有线程都到达barrier函数才能被wakeup。这个lab也比较简单，主要是熟悉pthread的条件变量，本质上和xv6的sleep&amp;wakeup一样。</p>
+<blockquote>
+<p>barrier_mutex用来保护条件变量nthread，当nthread满足条件后wakeup所有等待barrier_cond这个channel的线程。</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> <span class="keyword">void</span> </span></span><br><span class="line"><span class="function"><span class="title">barrier</span><span class="params">()</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="comment">// YOUR CODE HERE</span></span><br><span class="line">  <span class="comment">//</span></span><br><span class="line">  <span class="comment">// Block until all threads have called barrier() and</span></span><br><span class="line">  <span class="comment">// then increment bstate.round.</span></span><br><span class="line">  <span class="comment">//</span></span><br><span class="line">  pthread_mutex_lock(&amp;bstate.barrier_mutex);</span><br><span class="line">  bstate.nthread++;</span><br><span class="line">  <span class="keyword">if</span> (bstate.nthread == nthread) &#123;</span><br><span class="line">    bstate.nthread = <span class="number">0</span>;</span><br><span class="line">    bstate.round++;</span><br><span class="line">    pthread_cond_broadcast(&amp;bstate.barrier_cond);</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">else</span> &#123;</span><br><span class="line">    pthread_cond_wait(&amp;bstate.barrier_cond, &amp;bstate.barrier_mutex);</span><br><span class="line">  &#125;</span><br><span class="line">  pthread_mutex_unlock(&amp;bstate.barrier_mutex);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+
+<p>结果</p>
+<p><img src="https://pic2.zhimg.com/80/v2-0e04ba414726a4cb23de4791fb4f4ca9_720w.jpg" alt="img"></p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/6-S081/" rel="tag"># 6.S081</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2021/10/09/MIT6.S081%20Lab6/" rel="prev" title="MIT6.S081 Lab6 Cow">
+      <i class="fa fa-chevron-left"></i> MIT6.S081 Lab6 Cow
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2021/10/14/MIT6.S081%20Lab8/" rel="next" title="MIT6.S081 Lab8 Locks">
+      MIT6.S081 Lab8 Locks <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#Uthread-switching-between-threads"><span class="nav-number">1.</span> <span class="nav-text">Uthread: switching between threads</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Using-threads"><span class="nav-number">2.</span> <span class="nav-text">Using threads</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Barrier"><span class="nav-number">3.</span> <span class="nav-text">Barrier</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Kiseki"
+      src="/images/touxiang.JPG">
+  <p class="site-author-name" itemprop="name">Kiseki</p>
+  <div class="site-description" itemprop="description">"开心就好啦"</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">7</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-name">标签</span>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/kiseki-zj" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;kiseki-zj" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="https://beian.miit.gov.cn/" rel="noopener" target="_blank">null </a>
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Kiseki</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>

@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"kiseki-zj.github.io","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"right","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"style":"mac"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="Large files这个实验要求扩展xv6文件大小，从268个block（12direct * 1+1single indirect * 256）扩展到65803个block（11derect * 1+1single indirect * 256+1double indirect * 256 * 256）。 需要看懂bmap函数的作用，bmap接收一个inode和逻辑块号bn，通过寻址把bn映射">
+<meta property="og:type" content="article">
+<meta property="og:title" content="MIT6.S081 Lab9 FileSystem">
+<meta property="og:url" content="https://kiseki-zj.github.io/2021/11/05/MIT6.S081%20Lab9/index.html">
+<meta property="og:site_name" content="KISEKI">
+<meta property="og:description" content="Large files这个实验要求扩展xv6文件大小，从268个block（12direct * 1+1single indirect * 256）扩展到65803个block（11derect * 1+1single indirect * 256+1double indirect * 256 * 256）。 需要看懂bmap函数的作用，bmap接收一个inode和逻辑块号bn，通过寻址把bn映射">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://kiseki-zj.github.io/images/1.png">
+<meta property="article:published_time" content="2021-11-05T04:00:00.000Z">
+<meta property="article:modified_time" content="2021-11-05T05:45:01.695Z">
+<meta property="article:author" content="Kiseki">
+<meta property="article:tag" content="6.S081">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://kiseki-zj.github.io/images/1.png">
+
+<link rel="canonical" href="https://kiseki-zj.github.io/2021/11/05/MIT6.S081%20Lab9/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>MIT6.S081 Lab9 FileSystem | KISEKI</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">KISEKI</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://kiseki-zj.github.io/2021/11/05/MIT6.S081%20Lab9/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/touxiang.JPG">
+      <meta itemprop="name" content="Kiseki">
+      <meta itemprop="description" content=""开心就好啦"">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="KISEKI">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          MIT6.S081 Lab9 FileSystem
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+              
+
+              <time title="创建时间：2021-11-05 12:00:00 / 修改时间：13:45:01" itemprop="dateCreated datePublished" datetime="2021-11-05T12:00:00+08:00">2021-11-05</time>
+            </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="Large-files"><a href="#Large-files" class="headerlink" title="Large files"></a>Large files</h2><p>这个实验要求扩展xv6文件大小，从268个block（12direct * 1+1single indirect * 256）扩展到65803个block（11derect * 1+1single indirect * 256+1double indirect * 256 * 256）。</p>
+<p>需要看懂bmap函数的作用，bmap接收一个inode和逻辑块号bn，通过寻址把bn映射为物理块号返回。</p>
+<blockquote>
+<p>inode的addrs大小不变仍为13，direct缩小为11，最后一位改为double indirect，dinode同理。</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">static</span> uint</span></span><br><span class="line"><span class="function"><span class="title">bmap</span><span class="params">(struct inode *ip, uint bn)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  uint addr, *a;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">buf</span> *<span class="title">bp</span>;</span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span>(bn &lt; NDIRECT)&#123;</span><br><span class="line">    <span class="keyword">if</span>((addr = ip-&gt;addrs[bn]) == <span class="number">0</span>)</span><br><span class="line">      ip-&gt;addrs[bn] = addr = balloc(ip-&gt;dev);</span><br><span class="line">    <span class="keyword">return</span> addr;</span><br><span class="line">  &#125;</span><br><span class="line">  bn -= NDIRECT;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span>(bn &lt; NINDIRECT)&#123;</span><br><span class="line">    <span class="comment">// Load indirect block, allocating if necessary.</span></span><br><span class="line">    <span class="keyword">if</span>((addr = ip-&gt;addrs[NDIRECT]) == <span class="number">0</span>)</span><br><span class="line">      ip-&gt;addrs[NDIRECT] = addr = balloc(ip-&gt;dev);</span><br><span class="line">    bp = bread(ip-&gt;dev, addr);</span><br><span class="line">    a = (uint*)bp-&gt;data;</span><br><span class="line">    <span class="keyword">if</span>((addr = a[bn]) == <span class="number">0</span>)&#123;</span><br><span class="line">      a[bn] = addr = balloc(ip-&gt;dev);</span><br><span class="line">      log_write(bp);</span><br><span class="line">    &#125;</span><br><span class="line">    brelse(bp);</span><br><span class="line">    <span class="keyword">return</span> addr;</span><br><span class="line">  &#125;</span><br><span class="line">  bn -= NINDIRECT;</span><br><span class="line">  <span class="keyword">if</span> (bn &lt; NDBDIRECT) &#123;</span><br><span class="line">    <span class="keyword">if</span> ((addr = ip-&gt;addrs[NDIRECT + <span class="number">1</span>]) == <span class="number">0</span>)</span><br><span class="line">      ip-&gt;addrs[NDIRECT + <span class="number">1</span>] = addr = balloc(ip-&gt;dev);</span><br><span class="line">    bp = bread(ip-&gt;dev, addr);</span><br><span class="line">    a = (uint*)bp-&gt;data;</span><br><span class="line">    <span class="keyword">if</span> ((addr = a[bn / NINDIRECT]) == <span class="number">0</span>) &#123;</span><br><span class="line">      a[bn / NINDIRECT] = addr = balloc(ip-&gt;dev);</span><br><span class="line">      log_write(bp);</span><br><span class="line">    &#125;</span><br><span class="line">    brelse(bp);</span><br><span class="line">    bp = bread(ip-&gt;dev, addr);</span><br><span class="line">    a = (uint*)bp-&gt;data;</span><br><span class="line">    <span class="keyword">if</span> ((addr = a[bn % NINDIRECT]) == <span class="number">0</span>) &#123;</span><br><span class="line">      a[bn % NINDIRECT] = addr = balloc(ip-&gt;dev);</span><br><span class="line">      log_write(bp);</span><br><span class="line">    &#125;</span><br><span class="line">    brelse(bp);</span><br><span class="line">    <span class="keyword">return</span> addr;</span><br><span class="line">  &#125;</span><br><span class="line">  panic(<span class="string">&quot;bmap: out of range&quot;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>修改itrunc使得能够释放double indirect的块。</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span></span></span><br><span class="line"><span class="function"><span class="title">itrunc</span><span class="params">(struct inode *ip)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">int</span> i, j;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">buf</span> *<span class="title">bp</span>;</span></span><br><span class="line">  uint *a;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">for</span>(i = <span class="number">0</span>; i &lt; NDIRECT; i++)&#123;</span><br><span class="line">    <span class="keyword">if</span>(ip-&gt;addrs[i])&#123;</span><br><span class="line">      bfree(ip-&gt;dev, ip-&gt;addrs[i]);</span><br><span class="line">      ip-&gt;addrs[i] = <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span>(ip-&gt;addrs[NDIRECT])&#123;</span><br><span class="line">    bp = bread(ip-&gt;dev, ip-&gt;addrs[NDIRECT]);</span><br><span class="line">    a = (uint*)bp-&gt;data;</span><br><span class="line">    <span class="keyword">for</span>(j = <span class="number">0</span>; j &lt; NINDIRECT; j++)&#123;</span><br><span class="line">      <span class="keyword">if</span>(a[j])</span><br><span class="line">        bfree(ip-&gt;dev, a[j]);</span><br><span class="line">    &#125;</span><br><span class="line">    brelse(bp);</span><br><span class="line">    bfree(ip-&gt;dev, ip-&gt;addrs[NDIRECT]);</span><br><span class="line">    ip-&gt;addrs[NDIRECT] = <span class="number">0</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">if</span> (ip-&gt;addrs[NDIRECT + <span class="number">1</span>]) &#123;</span><br><span class="line">    bp = bread(ip-&gt;dev, ip-&gt;addrs[NDIRECT + <span class="number">1</span>]);</span><br><span class="line">    a = (uint*)bp-&gt;data;</span><br><span class="line">    <span class="keyword">for</span>(j = <span class="number">0</span>; j &lt; NINDIRECT; j++) &#123;</span><br><span class="line">      <span class="keyword">if</span> (a[j]) &#123;</span><br><span class="line">        uint addr, *data;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">buf</span> *<span class="title">bbp</span>;</span></span><br><span class="line">        addr = a[j];</span><br><span class="line">        bbp = bread(ip-&gt;dev, addr);</span><br><span class="line">        data = (uint*)bbp-&gt;data;</span><br><span class="line">        <span class="keyword">for</span> (<span class="keyword">int</span> k = <span class="number">0</span>; k &lt; NINDIRECT; k++) &#123;</span><br><span class="line">          <span class="keyword">if</span> (data[k])</span><br><span class="line">            bfree(ip-&gt;dev, data[k]);</span><br><span class="line">        &#125;</span><br><span class="line">        brelse(bbp);</span><br><span class="line">        bfree(ip-&gt;dev, addr);</span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    brelse(bp);</span><br><span class="line">    bfree(ip-&gt;dev, ip-&gt;addrs[NDIRECT + <span class="number">1</span>]);</span><br><span class="line">    ip-&gt;addrs[NDIRECT + <span class="number">1</span>] = <span class="number">0</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  ip-&gt;size = <span class="number">0</span>;</span><br><span class="line">  iupdate(ip);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="Symbolic-links"><a href="#Symbolic-links" class="headerlink" title="Symbolic links"></a>Symbolic links</h2><p>硬链接就是几个不同的direntry拥有相同的inum。软链接是一个特殊的文件，文件内容是一个路径指向所链接的文件。</p>
+<p>xv6实现了硬链接，这个lab要求实现软链接。</p>
+<blockquote>
+<p>首先实现系统调用symlink来创建一个软链接文件。</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">uint64</span></span><br><span class="line"><span class="function"><span class="title">sys_symlink</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">  <span class="keyword">char</span> target[MAXPATH], path[MAXPATH];</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">inode</span> *<span class="title">ip</span>;</span></span><br><span class="line">  <span class="keyword">if</span> (argstr(<span class="number">0</span>, target, MAXPATH) &lt; <span class="number">0</span> || argstr(<span class="number">1</span>, path, MAXPATH) &lt; <span class="number">0</span>) &#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  begin_op();</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span> ((ip = create(path, T_SYMLINK, <span class="number">0</span>, <span class="number">0</span>)) == <span class="number">0</span>) &#123;</span><br><span class="line">    end_op();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  writei(ip, <span class="number">0</span>, (uint64)target, <span class="number">0</span>, MAXPATH);</span><br><span class="line">  iunlockput(ip);</span><br><span class="line">  end_op();</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>修改系统调用open用来打开软链接文件。如果O_NOFOLLOW则直接返回这个软链接的inode。</p>
+<p>否则返回它指向的文件的inode，如果指向的文件也是一个软链接，继续打开软链接指向的文件直到指向一个inode或形成环。</p>
+<p>这里需要注意iunlock和iput的区别。iget/iput用于增加/减少ip的ref，用于表示inode cache中这个inode有多少个指针正在指向它，如果没有一个进程指向这个inode，则可以从cache中释放。</p>
+<p>ilock/iunlock用于给inode加锁保证线程同步。</p>
+<p>一般的调用操作顺序是iget-&gt;ilock-&gt;iunlock-&gt;iput.在open系统调用中，如果成功找到一个ip，返回时只需要到iunlock即可，不需要iput，因为open文件表示这个进程正在使用这个inode。直到close才能iput。</p>
+<p>另外注意有的函数中间会执行iget/ilock，例如namei成功调用时返回的ip是已经经过iget操作的。</p>
+<p>任何不需要的inode（open操作失败，或者递归打开软链接）都应该iunlockput。</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">uint64</span></span><br><span class="line"><span class="function"><span class="title">sys_open</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">char</span> path[MAXPATH];</span><br><span class="line">  <span class="keyword">int</span> fd, omode;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">file</span> *<span class="title">f</span>;</span></span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">inode</span> *<span class="title">ip</span>;</span></span><br><span class="line">  <span class="keyword">int</span> n;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span>((n = argstr(<span class="number">0</span>, path, MAXPATH)) &lt; <span class="number">0</span> || argint(<span class="number">1</span>, &amp;omode) &lt; <span class="number">0</span>)</span><br><span class="line">    <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line"></span><br><span class="line">  begin_op();</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span>(omode &amp; O_CREATE)&#123;</span><br><span class="line">    ip = create(path, T_FILE, <span class="number">0</span>, <span class="number">0</span>);</span><br><span class="line">    <span class="keyword">if</span>(ip == <span class="number">0</span>)&#123;</span><br><span class="line">      end_op();</span><br><span class="line">      <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    <span class="keyword">if</span>((ip = namei(path)) == <span class="number">0</span>)&#123;</span><br><span class="line">      end_op();</span><br><span class="line">      <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    ilock(ip);</span><br><span class="line">    <span class="keyword">if</span>(ip-&gt;type == T_DIR &amp;&amp; omode != O_RDONLY)&#123;</span><br><span class="line">      iunlockput(ip);</span><br><span class="line">      end_op();</span><br><span class="line">      <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span>(ip-&gt;type == T_DEVICE &amp;&amp; (ip-&gt;major &lt; <span class="number">0</span> || ip-&gt;major &gt;= NDEV))&#123;</span><br><span class="line">    iunlockput(ip);</span><br><span class="line">    end_op();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">int</span> depth = <span class="number">0</span>;</span><br><span class="line">  <span class="keyword">if</span> (ip-&gt;type == T_SYMLINK &amp;&amp; !(omode&amp;O_NOFOLLOW)) &#123;</span><br><span class="line">    <span class="keyword">while</span> (ip-&gt;type == T_SYMLINK &amp;&amp; depth &lt; <span class="number">10</span>) &#123;</span><br><span class="line">      readi(ip, <span class="number">0</span>, (uint64)path, <span class="number">0</span>, MAXPATH);</span><br><span class="line">      iunlockput(ip);</span><br><span class="line">      <span class="keyword">if</span> ((ip = namei(path)) == <span class="number">0</span>) &#123;</span><br><span class="line">        end_op();</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">      &#125;</span><br><span class="line">      ilock(ip);</span><br><span class="line">      depth++;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (depth == <span class="number">10</span>) &#123;</span><br><span class="line">      iunlockput(ip);</span><br><span class="line">      end_op();</span><br><span class="line">      <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    &#125;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">if</span>((f = filealloc()) == <span class="number">0</span> || (fd = fdalloc(f)) &lt; <span class="number">0</span>)&#123;</span><br><span class="line">    <span class="keyword">if</span>(f)</span><br><span class="line">      fileclose(f);</span><br><span class="line">    iunlockput(ip);</span><br><span class="line">    end_op();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">  &#125; </span><br><span class="line">  </span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span>(ip-&gt;type == T_DEVICE)&#123;</span><br><span class="line">    f-&gt;type = FD_DEVICE;</span><br><span class="line">    f-&gt;major = ip-&gt;major;</span><br><span class="line">  &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">    f-&gt;type = FD_INODE;</span><br><span class="line">    f-&gt;off = <span class="number">0</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  f-&gt;ip = ip;</span><br><span class="line">  f-&gt;readable = !(omode &amp; O_WRONLY);</span><br><span class="line">  f-&gt;writable = (omode &amp; O_WRONLY) || (omode &amp; O_RDWR);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span>((omode &amp; O_TRUNC) &amp;&amp; ip-&gt;type == T_FILE)&#123;</span><br><span class="line">    itrunc(ip);</span><br><span class="line">  &#125;</span><br><span class="line"></span><br><span class="line">  iunlock(ip);</span><br><span class="line">  end_op();</span><br><span class="line"></span><br><span class="line">  <span class="keyword">return</span> fd;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="结果"><a href="#结果" class="headerlink" title="结果"></a>结果</h2><p><img src="/images/1.png"></p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/6-S081/" rel="tag"># 6.S081</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2021/10/14/MIT6.S081%20Lab8/" rel="prev" title="MIT6.S081 Lab8 Locks">
+      <i class="fa fa-chevron-left"></i> MIT6.S081 Lab8 Locks
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#Large-files"><span class="nav-number">1.</span> <span class="nav-text">Large files</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Symbolic-links"><span class="nav-number">2.</span> <span class="nav-text">Symbolic links</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BB%93%E6%9E%9C"><span class="nav-number">3.</span> <span class="nav-text">结果</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Kiseki"
+      src="/images/touxiang.JPG">
+  <p class="site-author-name" itemprop="name">Kiseki</p>
+  <div class="site-description" itemprop="description">"开心就好啦"</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">7</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-name">标签</span>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/kiseki-zj" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;kiseki-zj" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="https://beian.miit.gov.cn/" rel="noopener" target="_blank">null </a>
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Kiseki</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>

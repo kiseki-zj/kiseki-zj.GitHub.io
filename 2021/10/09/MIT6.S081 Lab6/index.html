@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"kiseki-zj.github.io","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"right","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"style":"mac"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="COW forkfork的时候xv6会为子进程立刻分配所需的物理内存，并把父进程的用户内存复制过去。这样造成了时空上的浪费。写时复制指的是fork时不立刻分配物理内存，而是父子进程共用父进程的地址空间。 实现这个功能主要要实现3个部分： 1.fork时将子进程地址空间逐页map到和父进程一样的地址空间，并且把父子进程页表项设置为不可写。 2.当某个进程要写一个COW map的不可写页时，此时这个进">
+<meta property="og:type" content="article">
+<meta property="og:title" content="MIT6.S081 Lab6 Cow">
+<meta property="og:url" content="https://kiseki-zj.github.io/2021/10/09/MIT6.S081%20Lab6/index.html">
+<meta property="og:site_name" content="KISEKI">
+<meta property="og:description" content="COW forkfork的时候xv6会为子进程立刻分配所需的物理内存，并把父进程的用户内存复制过去。这样造成了时空上的浪费。写时复制指的是fork时不立刻分配物理内存，而是父子进程共用父进程的地址空间。 实现这个功能主要要实现3个部分： 1.fork时将子进程地址空间逐页map到和父进程一样的地址空间，并且把父子进程页表项设置为不可写。 2.当某个进程要写一个COW map的不可写页时，此时这个进">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://pic2.zhimg.com/80/v2-707f039c178ba7db7fa04330baa66541_720w.jpg">
+<meta property="og:image" content="https://pic4.zhimg.com/80/v2-16198edaae5d2659e976b78ef9dfe693_720w.jpg">
+<meta property="article:published_time" content="2021-10-09T04:00:00.000Z">
+<meta property="article:modified_time" content="2021-11-05T04:49:44.800Z">
+<meta property="article:author" content="Kiseki">
+<meta property="article:tag" content="6.S081">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://pic2.zhimg.com/80/v2-707f039c178ba7db7fa04330baa66541_720w.jpg">
+
+<link rel="canonical" href="https://kiseki-zj.github.io/2021/10/09/MIT6.S081%20Lab6/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>MIT6.S081 Lab6 Cow | KISEKI</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">KISEKI</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://kiseki-zj.github.io/2021/10/09/MIT6.S081%20Lab6/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/touxiang.JPG">
+      <meta itemprop="name" content="Kiseki">
+      <meta itemprop="description" content=""开心就好啦"">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="KISEKI">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          MIT6.S081 Lab6 Cow
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2021-10-09 12:00:00" itemprop="dateCreated datePublished" datetime="2021-10-09T12:00:00+08:00">2021-10-09</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2021-11-05 12:49:44" itemprop="dateModified" datetime="2021-11-05T12:49:44+08:00">2021-11-05</time>
+              </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="COW-fork"><a href="#COW-fork" class="headerlink" title="COW fork"></a><strong>COW fork</strong></h2><p>fork的时候xv6会为子进程立刻分配所需的物理内存，并把父进程的用户内存复制过去。这样造成了时空上的浪费。写时复制指的是fork时不立刻分配物理内存，而是父子进程共用父进程的地址空间。</p>
+<p>实现这个功能主要要实现3个部分：</p>
+<p>1.fork时将子进程地址空间逐页map到和父进程一样的地址空间，并且把父子进程页表项设置为不可写。</p>
+<p>2.当某个进程要写一个COW map的不可写页时，此时这个进程就不能和其他进程共享这一页了，需要另外开辟新的物理内存并map，这一部分通过处理page fault实现。</p>
+<p>3.注意物理页free的时机，如果某一物理页被多个进程共享，那么即使其中某一个进程不再使用它，它也不能被free。当最后一个使用它的进程free这一页时才真正释放。</p>
+<p>第一个部分在uvmcopy函数中实现，fork会调用uvmcopy来把父进程地址空间复制给子进程：</p>
+<blockquote>
+<p>在原uvmcopy的基础上删除了分配内存的过程。逐页地，把父进程的物理地址map到子进程的页表中去。<br>注意flag的设置，要把PTE_W位清除，并且set了flag中的保留位，用于指明这是一个由于COW fork而导致无法write的页。这是有必要的，因为操作系统不能保证用户程序不是恶意的，用户程序可能写一个它本不该写的页，如果不判断是否为COW map的页，到pagefault处理完用户程序就变得能够写这个页，这是不安全的。pte的flag如下图。<br>incref用于增加pa对应页的ref count，下面会说</p>
+</blockquote>
+<p><img src="https://pic2.zhimg.com/80/v2-707f039c178ba7db7fa04330baa66541_720w.jpg" alt="img"></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span></span></span><br><span class="line"><span class="function"><span class="title">uvmcopy</span><span class="params">(<span class="keyword">pagetable_t</span> old, <span class="keyword">pagetable_t</span> <span class="keyword">new</span>, uint64 sz)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">pte_t</span> *pte;</span><br><span class="line">  uint64 pa, i;</span><br><span class="line">  uint flags;</span><br><span class="line"></span><br><span class="line">  <span class="keyword">for</span>(i = <span class="number">0</span>; i &lt; sz; i += PGSIZE)&#123;</span><br><span class="line">    <span class="keyword">if</span>((pte = walk(old, i, <span class="number">0</span>)) == <span class="number">0</span>)</span><br><span class="line">      panic(<span class="string">&quot;uvmcopy: pte should exist&quot;</span>);</span><br><span class="line">    <span class="keyword">if</span>((*pte &amp; PTE_V) == <span class="number">0</span>)</span><br><span class="line">      panic(<span class="string">&quot;uvmcopy: page not present&quot;</span>);</span><br><span class="line">    pa = PTE2PA(*pte);</span><br><span class="line">    flags = PTE_FLAGS(*pte);</span><br><span class="line">    flags = (flags &amp; ~PTE_W) | PTE_RESERVE;</span><br><span class="line">    *pte = (~(*pte ^ ~PTE_W)) | PTE_RESERVE;</span><br><span class="line">    <span class="keyword">if</span> (mappages(<span class="keyword">new</span>, i, PGSIZE, (uint64)pa, flags) != <span class="number">0</span>) &#123;</span><br><span class="line">      <span class="keyword">goto</span> err;</span><br><span class="line">    &#125;</span><br><span class="line">    incref(pa);</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">  err:</span><br><span class="line">   uvmunmap(<span class="keyword">new</span>, <span class="number">0</span>, i / PGSIZE, <span class="number">1</span>);</span><br><span class="line">   <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+
+
+<p>第二部分实现物理内存的分配，有两种情况会导致写共享页：用户程序主动写和内核缓存复制到用户空间（如read系统调用）。第一种情况需要在usertrap中处理pagefault：</p>
+<blockquote>
+<p>首先判断用户要写的这一页是否为COWmap页，如果不是则杀死进程，然后分配物理内存并map</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">... </span><br><span class="line"><span class="keyword">else</span> <span class="keyword">if</span> (r_scause() == <span class="number">15</span>) &#123;</span><br><span class="line">      uint64 va = r_stval();</span><br><span class="line">      <span class="keyword">pte_t</span> *pte = walk(p-&gt;pagetable, va, <span class="number">0</span>);</span><br><span class="line">      <span class="keyword">if</span> (!(PTE_FLAGS(*pte)&amp;PTE_RESERVE)) &#123;</span><br><span class="line">        p-&gt;killed = <span class="number">1</span>;</span><br><span class="line">      &#125;</span><br><span class="line">      <span class="keyword">else</span> &#123;</span><br><span class="line">        va = PGROUNDDOWN(va);</span><br><span class="line">        uint64 ka = (uint64)kalloc();</span><br><span class="line">        <span class="keyword">if</span> (ka == <span class="number">0</span>) &#123;</span><br><span class="line">          p-&gt;killed = <span class="number">1</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">else</span> &#123;</span><br><span class="line">          uint flags = PTE_FLAGS(*pte);</span><br><span class="line">          flags = flags &amp; ~PTE_RESERVE;</span><br><span class="line">          uint64 pa = walkaddr(p-&gt;pagetable, va);</span><br><span class="line">          memmove((<span class="keyword">void</span>*)ka, (<span class="keyword">void</span>*)pa, PGSIZE);</span><br><span class="line">          uvmunmap(p-&gt;pagetable, va, <span class="number">1</span>, <span class="number">1</span>);</span><br><span class="line">          mappages(p-&gt;pagetable, va, <span class="number">1</span>, ka, flags | PTE_W); </span><br><span class="line">        &#125;</span><br><span class="line">      &#125;</span><br><span class="line">  &#125;</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p>第二种情况在copyout中实现，和上面差不多：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">int</span></span></span><br><span class="line"><span class="function"><span class="title">copyout</span><span class="params">(<span class="keyword">pagetable_t</span> pagetable, uint64 dstva, <span class="keyword">char</span> *src, uint64 len)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  uint64 n, va0, pa0;</span><br><span class="line">  <span class="keyword">if</span> (dstva &gt; MAXVA - len) <span class="keyword">return</span> <span class="number">-1</span>; </span><br><span class="line">  <span class="keyword">while</span>(len &gt; <span class="number">0</span>)&#123;</span><br><span class="line">    va0 = PGROUNDDOWN(dstva);</span><br><span class="line">    <span class="keyword">pte_t</span>* pte = walk(pagetable, va0, <span class="number">0</span>);</span><br><span class="line">    <span class="keyword">if</span> (pte == <span class="number">0</span>) <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    <span class="keyword">if</span> (!(PTE_FLAGS(*pte) &amp; PTE_W)) &#123;</span><br><span class="line">      <span class="keyword">if</span> (!(PTE_FLAGS(*pte) &amp; PTE_RESERVE)) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">      &#125;</span><br><span class="line">      uint64 va = va0;</span><br><span class="line">      uint64 ka = (uint64)kalloc();</span><br><span class="line">      <span class="keyword">if</span> (ka == <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">      &#125;</span><br><span class="line">      <span class="keyword">else</span> &#123;</span><br><span class="line">        uint flags = PTE_FLAGS(*pte);</span><br><span class="line">        flags = flags &amp; ~PTE_RESERVE;</span><br><span class="line">        uint64 pa = walkaddr(pagetable, va);</span><br><span class="line">        <span class="keyword">if</span> (pa == <span class="number">0</span>) <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">        memmove((<span class="keyword">void</span>*)ka, (<span class="keyword">void</span>*)pa, PGSIZE);</span><br><span class="line">        uvmunmap(pagetable, va, <span class="number">1</span>, <span class="number">1</span>);</span><br><span class="line">        mappages(pagetable, va, <span class="number">1</span>, ka, flags | PTE_W); </span><br><span class="line">      &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    pa0 = walkaddr(pagetable, va0);</span><br><span class="line">    <span class="keyword">if</span>(pa0 == <span class="number">0</span>)</span><br><span class="line">      <span class="keyword">return</span> <span class="number">-1</span>;</span><br><span class="line">    n = PGSIZE - (dstva - va0);</span><br><span class="line">    <span class="keyword">if</span>(n &gt; len)</span><br><span class="line">      n = len;</span><br><span class="line">    memmove((<span class="keyword">void</span> *)(pa0 + (dstva - va0)), src, n);</span><br><span class="line"></span><br><span class="line">    len -= n;</span><br><span class="line">    src += n;</span><br><span class="line">    dstva = va0 + PGSIZE;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>最后是free物理页面的问题，我们需要一个数据结构保存每个页面的引用次数ref count，当一个页面引用次数到达0时才可真正释放，数据结构设置在kalloc.c中：</p>
+<blockquote>
+<p>因为最大进程数NPROC为64，所以用1个字节保存引用数足以。每个页面用右移12位的页面序号作为index。</p>
+</blockquote>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">uint8 refcount[PHYSTOP / PGSIZE];</span><br><span class="line">...</span><br><span class="line">void incref(uint64 va) &#123;</span><br><span class="line">  refcount[va/PGSIZE]++;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>每次调用kfree时先减引用数，引用数为0再真正释放：</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span></span></span><br><span class="line"><span class="function"><span class="title">kfree</span><span class="params">(<span class="keyword">void</span> *pa)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">run</span> *<span class="title">r</span>;</span></span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span>(((uint64)pa % PGSIZE) != <span class="number">0</span> || (<span class="keyword">char</span>*)pa &lt; end || (uint64)pa &gt;= PHYSTOP)</span><br><span class="line">    panic(<span class="string">&quot;kfree&quot;</span>);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// Fill with junk to catch dangling refs.</span></span><br><span class="line">  <span class="keyword">if</span> (--refcount[(uint64)pa / PGSIZE] &gt; <span class="number">0</span>) </span><br><span class="line">    <span class="keyword">return</span> ;</span><br><span class="line">  <span class="built_in">memset</span>(pa, <span class="number">1</span>, PGSIZE);</span><br><span class="line"></span><br><span class="line">  r = (struct run*)pa;</span><br><span class="line"></span><br><span class="line">  acquire(&amp;kmem.lock);</span><br><span class="line">  r-&gt;next = kmem.freelist;</span><br><span class="line">  kmem.freelist = r;</span><br><span class="line">  release(&amp;kmem.lock);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>初始化的时候在freerange把refcount设置为0（这里设置为1再kfree就变成0了）。每次kalloc即初次分配时把refcount设置为1：</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span></span></span><br><span class="line"><span class="function"><span class="title">freerange</span><span class="params">(<span class="keyword">void</span> *pa_start, <span class="keyword">void</span> *pa_end)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="keyword">char</span> *p;</span><br><span class="line">  p = (<span class="keyword">char</span>*)PGROUNDUP((uint64)pa_start);</span><br><span class="line">  <span class="keyword">for</span>(; p + PGSIZE &lt;= (<span class="keyword">char</span>*)pa_end; p += PGSIZE)</span><br><span class="line">  &#123;</span><br><span class="line">    refcount[(uint64)p / PGSIZE] = <span class="number">1</span>;</span><br><span class="line">    kfree(p);</span><br><span class="line">  &#125;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> *</span></span><br><span class="line"><span class="function"><span class="title">kalloc</span><span class="params">(<span class="keyword">void</span>)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">run</span> *<span class="title">r</span>;</span></span><br><span class="line"></span><br><span class="line">  acquire(&amp;kmem.lock);</span><br><span class="line">  r = kmem.freelist;</span><br><span class="line">  <span class="keyword">if</span>(r)</span><br><span class="line">    kmem.freelist = r-&gt;next;</span><br><span class="line">  release(&amp;kmem.lock);</span><br><span class="line"></span><br><span class="line">  <span class="keyword">if</span>(r) &#123;</span><br><span class="line">    <span class="built_in">memset</span>((<span class="keyword">char</span>*)r, <span class="number">5</span>, PGSIZE); <span class="comment">// fill with junk</span></span><br><span class="line">    refcount[(uint64)r / PGSIZE] = <span class="number">1</span>;</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> (<span class="keyword">void</span>*)r;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>结果：</p>
+<p><img src="https://pic4.zhimg.com/80/v2-16198edaae5d2659e976b78ef9dfe693_720w.jpg" alt="img"></p>
+<h2 id="心得"><a href="#心得" class="headerlink" title="心得"></a>心得</h2><p>debug的时候可以在lab3 vmprint基础上输出一下flag以及对应的refcount查看有没有错误。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/6-S081/" rel="tag"># 6.S081</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2021/04/24/MIT6.S081%20Lab5/" rel="prev" title="MIT6.S081 Lab5 Lazy Allocation">
+      <i class="fa fa-chevron-left"></i> MIT6.S081 Lab5 Lazy Allocation
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2021/10/12/MIT6.S081%20Lab7/" rel="next" title="MIT6.S081 Lab7 Multithreading">
+      MIT6.S081 Lab7 Multithreading <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#COW-fork"><span class="nav-number">1.</span> <span class="nav-text">COW fork</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%BF%83%E5%BE%97"><span class="nav-number">2.</span> <span class="nav-text">心得</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Kiseki"
+      src="/images/touxiang.JPG">
+  <p class="site-author-name" itemprop="name">Kiseki</p>
+  <div class="site-description" itemprop="description">"开心就好啦"</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">7</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-name">标签</span>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/kiseki-zj" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;kiseki-zj" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="https://beian.miit.gov.cn/" rel="noopener" target="_blank">null </a>
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Kiseki</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>

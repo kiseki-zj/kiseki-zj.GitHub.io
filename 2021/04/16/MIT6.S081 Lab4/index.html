@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"kiseki-zj.github.io","root":"/","scheme":"Pisces","version":"7.8.0","exturl":false,"sidebar":{"position":"right","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"style":"mac"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="实验前准备 阅读trap.c，trampoline.s  RISC-V assembly回答几个问题，阅读call.c和它的汇编代码理解函数的calling conventions即可  call.c  1234567891011121314151617#include &quot;kernel&#x2F;param.h&quot;#include &quot;kernel&#x2F;types.h&quot;#in">
+<meta property="og:type" content="article">
+<meta property="og:title" content="MIT6.S081 Lab4 Traps">
+<meta property="og:url" content="https://kiseki-zj.github.io/2021/04/16/MIT6.S081%20Lab4/index.html">
+<meta property="og:site_name" content="KISEKI">
+<meta property="og:description" content="实验前准备 阅读trap.c，trampoline.s  RISC-V assembly回答几个问题，阅读call.c和它的汇编代码理解函数的calling conventions即可  call.c  1234567891011121314151617#include &quot;kernel&#x2F;param.h&quot;#include &quot;kernel&#x2F;types.h&quot;#in">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://pic1.zhimg.com/80/v2-7f3932002f682a177fe484725656a190_720w.jpg">
+<meta property="og:image" content="https://pic4.zhimg.com/80/v2-4351f298147c4da1f1b72aef8db25093_720w.jpg">
+<meta property="og:image" content="https://pic4.zhimg.com/80/v2-03e9232fd2cdaa8b6cae56499e39ac6b_720w.jpg">
+<meta property="article:published_time" content="2021-04-16T04:00:00.000Z">
+<meta property="article:modified_time" content="2021-11-05T04:49:44.799Z">
+<meta property="article:author" content="Kiseki">
+<meta property="article:tag" content="6.S081">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://pic1.zhimg.com/80/v2-7f3932002f682a177fe484725656a190_720w.jpg">
+
+<link rel="canonical" href="https://kiseki-zj.github.io/2021/04/16/MIT6.S081%20Lab4/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>MIT6.S081 Lab4 Traps | KISEKI</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">KISEKI</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://kiseki-zj.github.io/2021/04/16/MIT6.S081%20Lab4/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/touxiang.JPG">
+      <meta itemprop="name" content="Kiseki">
+      <meta itemprop="description" content=""开心就好啦"">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="KISEKI">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          MIT6.S081 Lab4 Traps
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2021-04-16 12:00:00" itemprop="dateCreated datePublished" datetime="2021-04-16T12:00:00+08:00">2021-04-16</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2021-11-05 12:49:44" itemprop="dateModified" datetime="2021-11-05T12:49:44+08:00">2021-11-05</time>
+              </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="实验前准备"><a href="#实验前准备" class="headerlink" title="实验前准备"></a>实验前准备</h2><blockquote>
+<p>阅读trap.c，trampoline.s</p>
+</blockquote>
+<h2 id="RISC-V-assembly"><a href="#RISC-V-assembly" class="headerlink" title="RISC-V assembly"></a>RISC-V assembly</h2><p>回答几个问题，阅读call.c和它的汇编代码理解函数的calling conventions即可</p>
+<blockquote>
+<p>call.c</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;kernel/param.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;kernel/types.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;kernel/stat.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="meta-keyword">include</span> <span class="meta-string">&quot;user/user.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">g</span><span class="params">(<span class="keyword">int</span> x)</span> </span>&#123;</span><br><span class="line">  <span class="keyword">return</span> x+<span class="number">3</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">int</span> <span class="title">f</span><span class="params">(<span class="keyword">int</span> x)</span> </span>&#123;</span><br><span class="line">  <span class="keyword">return</span> g(x);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">main</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">  <span class="built_in">printf</span>(<span class="string">&quot;%d %d\n&quot;</span>, f(<span class="number">8</span>)+<span class="number">1</span>, <span class="number">13</span>);</span><br><span class="line">  <span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>call.asm</p>
+</blockquote>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line">int g(int x) &#123;</span><br><span class="line">   0:	1141                	addi	sp,sp,-16</span><br><span class="line">   2:	e422                	sd	s0,8(sp)</span><br><span class="line">   4:	0800                	addi	s0,sp,16</span><br><span class="line">  return x+3;</span><br><span class="line">&#125;</span><br><span class="line">   6:	250d                	addiw	a0,a0,3</span><br><span class="line">   8:	6422                	ld	s0,8(sp)</span><br><span class="line">   a:	0141                	addi	sp,sp,16</span><br><span class="line">   c:	8082                	ret</span><br><span class="line"></span><br><span class="line">000000000000000e &lt;f&gt;:</span><br><span class="line"></span><br><span class="line">int f(int x) &#123;</span><br><span class="line">   e:	1141                	addi	sp,sp,-16</span><br><span class="line">  10:	e422                	sd	s0,8(sp)</span><br><span class="line">  12:	0800                	addi	s0,sp,16</span><br><span class="line">  return g(x);</span><br><span class="line">&#125;</span><br><span class="line">  14:	250d                	addiw	a0,a0,3</span><br><span class="line">  16:	6422                	ld	s0,8(sp)</span><br><span class="line">  18:	0141                	addi	sp,sp,16</span><br><span class="line">  1a:	8082                	ret</span><br><span class="line"></span><br><span class="line">000000000000001c &lt;main&gt;:</span><br><span class="line"></span><br><span class="line">void main(void) &#123;</span><br><span class="line">  1c:	1141                	addi	sp,sp,-16</span><br><span class="line">  1e:	e406                	sd	ra,8(sp)</span><br><span class="line">  20:	e022                	sd	s0,0(sp)</span><br><span class="line">  22:	0800                	addi	s0,sp,16</span><br><span class="line">  printf(&quot;%d %d\n&quot;, f(8)+1, 13);</span><br><span class="line">  24:	4635                	li	a2,13</span><br><span class="line">  26:	45b1                	li	a1,12</span><br><span class="line">  28:	00000517          	auipc	a0,0x0</span><br><span class="line">  2c:	7b850513          	addi	a0,a0,1976 # 7e0 &lt;malloc+0xea&gt;</span><br><span class="line">  30:	00000097          	auipc	ra,0x0</span><br><span class="line">  34:	608080e7          	jalr	1544(ra) # 638 &lt;printf&gt;</span><br><span class="line">  exit(0);</span><br><span class="line">  38:	4501                	li	a0,0</span><br><span class="line">  3a:	00000097          	auipc	ra,0x0</span><br><span class="line">  3e:	276080e7          	jalr	630(ra) # 2b0 &lt;exit&gt;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>Q1.哪个寄存器保存函数参数，例如哪个保存参数13?</p>
+</blockquote>
+<p>A：a0，a1，a2…保存传入的参数，13保存在a2中</p>
+<blockquote>
+<p>Q2.哪里调用了函数f和g？</p>
+</blockquote>
+<p>A：没有调用，编译器把两个函数内联了。</p>
+<blockquote>
+<p>Q3.函数printf的地址？</p>
+</blockquote>
+<p>A：观察汇编代码有</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">30:	00000097          	auipc	ra,0x0</span><br><span class="line">34:	608080e7          	jalr	1544(ra) # 638 &lt;printf&gt;</span><br></pre></td></tr></table></figure>
+
+<p>auipc的作用是把立即数左移12位，低12位补0，和pc相加赋给指定寄存器。这里立即数是0，指定寄存器是ra，即ra=pc=0x30=48。jalr作用是跳转到立即数+指定寄存器处并且把ra的值+8。因此jalr会跳转到1544+48=1592=0x638处，观察汇编代码发现：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">0000000000000638 &lt;printf&gt;:</span><br><span class="line"></span><br><span class="line">void</span><br><span class="line">printf(const char *fmt, ...)</span><br><span class="line">&#123;</span><br><span class="line"> 638:	711d                	addi	sp,sp,-96</span><br><span class="line"> 63a:	ec06                	sd	ra,24(sp)</span><br><span class="line"> 63c:	e822                	sd	s0,16(sp)</span><br><span class="line"> 63e:	1000                	addi	s0,sp,32</span><br><span class="line"> 640:	e40c                	sd	a1,8(s0)</span><br><span class="line"> 642:	e810                	sd	a2,16(s0)</span><br></pre></td></tr></table></figure>
+
+<p>确实在0x638</p>
+<blockquote>
+<p>Q4.在printf之后ra的值？</p>
+</blockquote>
+<p>A.如上述，为0x30+8=0x38，用gdb也可以看到</p>
+<p><img src="https://pic1.zhimg.com/80/v2-7f3932002f682a177fe484725656a190_720w.jpg" alt="img"></p>
+<p>执行完jalr后ra从0x30变为0x38</p>
+<blockquote>
+<p>Q5.运行以下代码，输出是什么？这个输出基于riscv是小端保存，如果是大端保存，怎么设置i才能获得相同输出？</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">unsigned</span> <span class="keyword">int</span> i = <span class="number">0x00646c72</span>;</span><br><span class="line"><span class="built_in">printf</span>(<span class="string">&quot;H%x Wo%s&quot;</span>, <span class="number">57616</span>, &amp;i);</span><br></pre></td></tr></table></figure>
+
+<p>A：输出为HE110 World</p>
+<p>因为riscv为小端存储，从&amp;i开始字节分别为0x72，0x6c，0x64， 0x00.分别对应’r’,’l’,’d’，’0’的ascii码，0x00作为字符串结束标志。</p>
+<p>57616=0xE110</p>
+<p>i应该设置为0x726c6400</p>
+<blockquote>
+<p>Q6.运行printf(“x=%d y=%d”, 3);在y=后面输出什么？为什么会这样？</p>
+</blockquote>
+<p>A：输出y=1。取决于寄存器a2（第3个参数）的值。</p>
+<h2 id="Backtrace"><a href="#Backtrace" class="headerlink" title="Backtrace"></a>Backtrace</h2><p>要求完成一个backtrace函数，在系统调用sys_sleep里调用这个函数，使其从下往上逐一输出内核栈各个stackframe的ra的值。</p>
+<p>主要是弄懂调用函数的stack frame的结构，如下图：</p>
+<p><img src="https://pic4.zhimg.com/80/v2-4351f298147c4da1f1b72aef8db25093_720w.jpg" alt="img"></p>
+<p>sp指向当前frame底部（栈是从上往下增长），fp指向当前frame顶部。栈顶部保存了函数返回地址ra以及上个frame的fp。具体可以看任意一个函数的汇编代码：</p>
+<p><img src="https://pic4.zhimg.com/80/v2-03e9232fd2cdaa8b6cae56499e39ac6b_720w.jpg" alt="img"></p>
+<p>一个函数在开始执行时会把ra，s0（即fp）的值压栈，然后保存一些寄存器的值，如果参数过多也会把参数保存在栈里，还会保存局部变量。</p>
+<p>backtrace的实现比较简单，模拟函数返回的步骤，输出ra（fp-8），然后找到上一个frame的fp（fp-16），以此类推。注意要求只输出内核态的frame信息，fp如果跳出内核栈的范围到了用户空间循环就要停止了。</p>
+<blockquote>
+<p>backtrace()</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">void</span> <span class="title">backtrace</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">  uint64 fp = r_fp();</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">proc</span> *<span class="title">p</span> =</span> myproc();</span><br><span class="line">  </span><br><span class="line">  <span class="keyword">while</span> (<span class="number">1</span>) &#123;</span><br><span class="line">    uint64 *ra_addr = (uint64*)(fp - <span class="number">8</span>);</span><br><span class="line">    uint64 *fp_addr = (uint64*)(fp - <span class="number">16</span>);</span><br><span class="line">    fp = *fp_addr;</span><br><span class="line">    <span class="comment">//printf(&quot;fp=%p\n&quot;, *fp_addr);</span></span><br><span class="line">    <span class="keyword">if</span> (PGROUNDUP(fp) != p-&gt;kstack+PGSIZE) </span><br><span class="line">      <span class="keyword">break</span>;</span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;%p\n&quot;</span>, *ra_addr);</span><br><span class="line">  &#125;</span><br><span class="line">  <span class="keyword">return</span> ;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="Alarm"><a href="#Alarm" class="headerlink" title="Alarm"></a>Alarm</h2><p>实现系统调用sigalarm(n, fn)，执行这个系统调用之后，用户程序在执行的时候能够每隔n个ticks执行一次用户态函数fn。</p>
+<p>riscv收到timer trap的情况有两种，在用户态收到trap和在内核态收到trap，分别会执行usertrap和kerneltrap处理函数。实验要求是在用户态收到n个ticks后执行函数，不用修改kerneltrap的代码。</p>
+<p>实验分两个步骤。test0要求程序执行了fn即可，不用管控制流有没有正常返回以及寄存器的值是否变动，test1和test2要求程序在执行fn后能够通过编写的系统调用sigreturn返回到产生trap的用户代码处，并且程序上下文没有改变。</p>
+<blockquote>
+<p>proc.h<br>给struct添加几个部分，包括需要执行的用户态函数p-&gt;handler，执行函数的间隔p-&gt;interval，距离上一次执行handler后已经产生的tick数p-&gt;tick（在allocproc处初始化为0）。<br>然后是用户态产生trap时的所有寄存器的值。由于执行handler时可能改变某些寄存器，再返回到原先的代码处时需要恢复现场。<br>p-&gt;flag用于判断当前时钟中断是否是在执行handler时产生的，如果是，则不需要执行handler。</p>
+</blockquote>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br></pre></td><td class="code"><pre><span class="line">struct proc &#123;</span><br><span class="line">  struct spinlock lock;</span><br><span class="line"></span><br><span class="line">  // p-&gt;lock must be held when using these:</span><br><span class="line">  enum procstate state;        // Process state</span><br><span class="line">  struct proc *parent;         // Parent process</span><br><span class="line">  void *chan;                  // If non-zero, sleeping on chan</span><br><span class="line">  int killed;                  // If non-zero, have been killed</span><br><span class="line">  int xstate;                  // Exit status to be returned to parent&#x27;s wait</span><br><span class="line">  int pid;                     // Process ID</span><br><span class="line"></span><br><span class="line">  // these are private to the process, so p-&gt;lock need not be held.</span><br><span class="line">  uint64 kstack;               // Virtual address of kernel stack</span><br><span class="line">  uint64 sz;                   // Size of process memory (bytes)</span><br><span class="line">  pagetable_t pagetable;       // User page table</span><br><span class="line">  struct trapframe *trapframe; // data page for trampoline.S</span><br><span class="line">  struct context context;      // swtch() here to run process</span><br><span class="line">  struct file *ofile[NOFILE];  // Open files</span><br><span class="line">  struct inode *cwd;           // Current directory</span><br><span class="line">  char name[16];               // Process name (debugging)</span><br><span class="line">  int interval;</span><br><span class="line">  uint64 handler;</span><br><span class="line">  int tick;</span><br><span class="line">  uint64 u_epc;</span><br><span class="line">  uint64 u_ra;</span><br><span class="line">  uint64 u_sp;</span><br><span class="line">  uint64 u_gp;</span><br><span class="line">  uint64 u_tp;</span><br><span class="line">  uint64 u_t0;</span><br><span class="line">  uint64 u_t1;</span><br><span class="line">  uint64 u_t2;</span><br><span class="line">  uint64 u_s0;</span><br><span class="line">  uint64 u_s1;</span><br><span class="line">  uint64 u_a0;</span><br><span class="line">  uint64 u_a1;</span><br><span class="line">  uint64 u_a2;</span><br><span class="line">  uint64 u_a3;</span><br><span class="line">  uint64 u_a4;</span><br><span class="line">  uint64 u_a5;</span><br><span class="line">  uint64 u_a6;</span><br><span class="line">  uint64 u_a7;</span><br><span class="line">  uint64 u_s2;</span><br><span class="line">  uint64 u_s3;</span><br><span class="line">  uint64 u_s4;</span><br><span class="line">  uint64 u_s5;</span><br><span class="line">  uint64 u_s6;</span><br><span class="line">  uint64 u_s7;</span><br><span class="line">  uint64 u_s8;</span><br><span class="line">  uint64 u_s9;</span><br><span class="line">  uint64 u_s10;</span><br><span class="line">  uint64 u_s11;</span><br><span class="line">  uint64 u_t3;</span><br><span class="line">  uint64 u_t4;</span><br><span class="line">  uint64 u_t5;</span><br><span class="line">  uint64 u_t6;</span><br><span class="line">  uint64 flag;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>在kernel目录新建alarm.c用于编写所需的两个系统调用。<br>sigalarm在调用时设置好proc的inteval以及handler的值，注意传入的函数地址也可以为0（因为在用户空间，代码段从虚拟地址0开始）。</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">uint64 <span class="title">sys_sigalarm</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    <span class="keyword">int</span> itv;</span><br><span class="line">    uint64 handler;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">proc</span>* <span class="title">p</span> =</span> myproc();</span><br><span class="line">    argint(<span class="number">0</span>, &amp;itv);</span><br><span class="line">    argaddr(<span class="number">1</span>, &amp;handler);</span><br><span class="line">    p-&gt;interval = itv;</span><br><span class="line">    p-&gt;handler = handler;</span><br><span class="line">    p-&gt;flag = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>usertrap()：<br>在每次产生时钟中断时p-&gt;tick加1，然后判断是否等于intervel。如果不等于就当成普通的时钟中断处理，如果等于并且当前用户态代码不在执行handler（flag==0）则执行以下操作：<br>把所有寄存器的值保存，把trampframe-&gt;epc的值设置为handler，这样一来在usertrapret时就会把epc设置为handler的第一句代码处，userret（trampoline.S）时执行sret就会返回到handler，从而执行handler。记住把flag设为1.</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span>(which_dev == <span class="number">2</span>) &#123;</span><br><span class="line">    <span class="comment">//printf(&quot;ticks=%d\n&quot;, ticks);</span></span><br><span class="line">    p-&gt;tick++;</span><br><span class="line">    <span class="keyword">if</span> (p-&gt;tick == p-&gt;interval) &#123;</span><br><span class="line">      <span class="keyword">if</span> (p-&gt;flag == <span class="number">0</span>) &#123;</span><br><span class="line">        p-&gt;u_epc = p-&gt;trapframe-&gt;epc;</span><br><span class="line">        p-&gt;u_ra = p-&gt;trapframe-&gt;ra;</span><br><span class="line">        p-&gt;u_sp = p-&gt;trapframe-&gt;sp;</span><br><span class="line">        p-&gt;u_gp = p-&gt;trapframe-&gt;gp;</span><br><span class="line">        p-&gt;u_tp = p-&gt;trapframe-&gt;tp;</span><br><span class="line">        p-&gt;u_t0 = p-&gt;trapframe-&gt;t0;</span><br><span class="line">        p-&gt;u_t1 = p-&gt;trapframe-&gt;t1;</span><br><span class="line">        p-&gt;u_t2 = p-&gt;trapframe-&gt;t2;</span><br><span class="line">        p-&gt;u_s0 = p-&gt;trapframe-&gt;s0;</span><br><span class="line">        p-&gt;u_s1 = p-&gt;trapframe-&gt;s1;</span><br><span class="line">        p-&gt;u_a0 = p-&gt;trapframe-&gt;a0;</span><br><span class="line">        p-&gt;u_a1 = p-&gt;trapframe-&gt;a1;</span><br><span class="line">        p-&gt;u_a2 = p-&gt;trapframe-&gt;a2;</span><br><span class="line">        p-&gt;u_a3 = p-&gt;trapframe-&gt;a3;</span><br><span class="line">        p-&gt;u_a4 = p-&gt;trapframe-&gt;a4;</span><br><span class="line">        p-&gt;u_a5 = p-&gt;trapframe-&gt;a5;</span><br><span class="line">        p-&gt;u_a6 = p-&gt;trapframe-&gt;a6;</span><br><span class="line">        p-&gt;u_a7 = p-&gt;trapframe-&gt;a7;</span><br><span class="line">        p-&gt;u_s2 = p-&gt;trapframe-&gt;s2;</span><br><span class="line">        p-&gt;u_s3 = p-&gt;trapframe-&gt;s3;</span><br><span class="line">        p-&gt;u_s4 = p-&gt;trapframe-&gt;s4;</span><br><span class="line">        p-&gt;u_s5 = p-&gt;trapframe-&gt;s5;</span><br><span class="line">        p-&gt;u_s6 = p-&gt;trapframe-&gt;s6;</span><br><span class="line">        p-&gt;u_s7 = p-&gt;trapframe-&gt;s7;</span><br><span class="line">        p-&gt;u_s8 = p-&gt;trapframe-&gt;s8;</span><br><span class="line">        p-&gt;u_s9 = p-&gt;trapframe-&gt;s9;</span><br><span class="line">        p-&gt;u_s10 = p-&gt;trapframe-&gt;s10;</span><br><span class="line">        p-&gt;u_s11 = p-&gt;trapframe-&gt;s11;</span><br><span class="line">        p-&gt;u_t3 = p-&gt;trapframe-&gt;t3;</span><br><span class="line">        p-&gt;u_t4 = p-&gt;trapframe-&gt;t4;</span><br><span class="line">        p-&gt;u_t5 = p-&gt;trapframe-&gt;t5;</span><br><span class="line">        p-&gt;u_t6 = p-&gt;trapframe-&gt;t6;</span><br><span class="line">      </span><br><span class="line">        p-&gt;trapframe-&gt;epc = (uint64)p-&gt;handler;</span><br><span class="line">        p-&gt;flag = <span class="number">1</span>;</span><br><span class="line">      &#125;</span><br><span class="line">      p-&gt;tick = <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    yield();</span><br><span class="line">  &#125;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>sigreturn()：在handler最后调用，保证控制流返回到产生trap的那句用户态代码处。<br>把trapframe-&gt;epc设置为time trap时保存的epc值，这样保证返回到正确的代码处。<br>恢复所有保存的寄存器。<br>handler里也会执行系统调用从而陷入内核态，trapframe会重新进行保存，所以不能保证handler函数的执行过程中进程的trampframe不会产生改变，但p-&gt;u_只有在时钟中断时并且tick=interval时（即进入handler之前）才会进行修改，因此可以保证返回到正确的上下文。</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">uint64 <span class="title">sys_sigreturn</span><span class="params">(<span class="keyword">void</span>)</span> </span>&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">proc</span>* <span class="title">p</span> =</span> myproc();</span><br><span class="line">    p-&gt;trapframe-&gt;epc = p-&gt;u_epc;</span><br><span class="line">    p-&gt;trapframe-&gt;ra = p-&gt;u_ra;</span><br><span class="line">    p-&gt;trapframe-&gt;sp = p-&gt;u_sp;</span><br><span class="line">    p-&gt;trapframe-&gt;gp = p-&gt;u_gp;</span><br><span class="line">    p-&gt;trapframe-&gt;tp = p-&gt;u_tp;</span><br><span class="line">    p-&gt;trapframe-&gt;t0 = p-&gt;u_t0;</span><br><span class="line">    p-&gt;trapframe-&gt;t1 = p-&gt;u_t1;</span><br><span class="line">    p-&gt;trapframe-&gt;t2 = p-&gt;u_t2;</span><br><span class="line">    p-&gt;trapframe-&gt;s0 = p-&gt;u_s0;</span><br><span class="line">    p-&gt;trapframe-&gt;s1 = p-&gt;u_s1;</span><br><span class="line">    p-&gt;trapframe-&gt;a0 = p-&gt;u_a0;</span><br><span class="line">    p-&gt;trapframe-&gt;a1 = p-&gt;u_a1;</span><br><span class="line">    p-&gt;trapframe-&gt;a2 = p-&gt;u_a2;</span><br><span class="line">    p-&gt;trapframe-&gt;a3 = p-&gt;u_a3;</span><br><span class="line">    p-&gt;trapframe-&gt;a4 = p-&gt;u_a4;</span><br><span class="line">    p-&gt;trapframe-&gt;a5 = p-&gt;u_a5;</span><br><span class="line">    p-&gt;trapframe-&gt;a6 = p-&gt;u_a6;</span><br><span class="line">    p-&gt;trapframe-&gt;a7 = p-&gt;u_a7;</span><br><span class="line">    p-&gt;trapframe-&gt;s2 = p-&gt;u_s2;</span><br><span class="line">    p-&gt;trapframe-&gt;s3 = p-&gt;u_s3;</span><br><span class="line">    p-&gt;trapframe-&gt;s4 = p-&gt;u_s4;</span><br><span class="line">    p-&gt;trapframe-&gt;s5 = p-&gt;u_s5;</span><br><span class="line">    p-&gt;trapframe-&gt;s6 = p-&gt;u_s6;</span><br><span class="line">    p-&gt;trapframe-&gt;s7 = p-&gt;u_s7;</span><br><span class="line">    p-&gt;trapframe-&gt;s8 = p-&gt;u_s8;</span><br><span class="line">    p-&gt;trapframe-&gt;s9 = p-&gt;u_s9;</span><br><span class="line">    p-&gt;trapframe-&gt;s10 = p-&gt;u_s10;</span><br><span class="line">    p-&gt;trapframe-&gt;s11 = p-&gt;u_s11;</span><br><span class="line">    p-&gt;trapframe-&gt;t3 = p-&gt;u_t3;</span><br><span class="line">    p-&gt;trapframe-&gt;t4 = p-&gt;u_t4;</span><br><span class="line">    p-&gt;trapframe-&gt;t5 = p-&gt;u_t5;</span><br><span class="line">    p-&gt;trapframe-&gt;t6 = p-&gt;u_t6;</span><br><span class="line">    p-&gt;flag = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这是部分核心代码，其他的就是把sigalarm和sigreturn注册成系统调用，编写makefile等，不再赘述。</p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/6-S081/" rel="tag"># 6.S081</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2021/04/03/MIT6.S081%20Lab3/" rel="prev" title="MIT6.S081 Lab3 Pgtbl">
+      <i class="fa fa-chevron-left"></i> MIT6.S081 Lab3 Pgtbl
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2021/04/24/MIT6.S081%20Lab5/" rel="next" title="MIT6.S081 Lab5 Lazy Allocation">
+      MIT6.S081 Lab5 Lazy Allocation <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%AE%9E%E9%AA%8C%E5%89%8D%E5%87%86%E5%A4%87"><span class="nav-number">1.</span> <span class="nav-text">实验前准备</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#RISC-V-assembly"><span class="nav-number">2.</span> <span class="nav-text">RISC-V assembly</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Backtrace"><span class="nav-number">3.</span> <span class="nav-text">Backtrace</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Alarm"><span class="nav-number">4.</span> <span class="nav-text">Alarm</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Kiseki"
+      src="/images/touxiang.JPG">
+  <p class="site-author-name" itemprop="name">Kiseki</p>
+  <div class="site-description" itemprop="description">"开心就好啦"</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">7</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+        <span class="site-state-item-count">1</span>
+        <span class="site-state-item-name">标签</span>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/kiseki-zj" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;kiseki-zj" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+  <div class="beian"><a href="https://beian.miit.gov.cn/" rel="noopener" target="_blank">null </a>
+  </div>
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Kiseki</span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://pisces.theme-next.org/" class="theme-link" rel="noopener" target="_blank">NexT.Pisces</a> 强力驱动
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/pisces.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>
